@@ -1,4 +1,4 @@
-"""Response Generator Agent — uses fine-tuned Qwen3-14B QLoRA model."""
+"""Response Generator Agent — fine-tuned Qwen via HuggingFace + peft (ROCm-safe, no Unsloth)."""
 
 from __future__ import annotations
 import time
@@ -26,56 +26,49 @@ ALPACA_PROMPT = """Below is an instruction that describes a task. Write a respon
 
 
 class ResponseGeneratorAgent:
-    """Loads fine-tuned or base Qwen3-14B and generates responses."""
+    """Loads base Qwen (+ LoRA adapter if trained) and generates responses."""
 
-    def __init__(self, model_path: str = ADAPTER_DIR, use_base_fallback: bool = True):
+    def __init__(self, model_path: str = ADAPTER_DIR):
         self.model_path = model_path
-        self.use_base_fallback = use_base_fallback
         self.model = None
         self.tokenizer = None
         self._model_label = "unloaded"
         self._load_model()
 
     def _load_model(self):
-        import os
         import torch
         from pathlib import Path
+        from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        # Prefer fine-tuned adapter, fall back to base model
-        adapter_exists = Path(self.model_path).exists() and any(Path(self.model_path).iterdir())
+        adapter_path = Path(self.model_path)
+        adapter_exists = adapter_path.exists() and (adapter_path / "adapter_config.json").exists()
 
         try:
-            from unsloth import FastLanguageModel
+            self.tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_ID)
 
-            model_id = self.model_path if adapter_exists else BASE_MODEL_ID
-            self.model, self.tokenizer = FastLanguageModel.from_pretrained(
-                model_name=model_id,
-                max_seq_length=MAX_SEQ_LENGTH,
-                dtype=None,
-                load_in_4bit=LOAD_IN_4BIT,
-            )
-            FastLanguageModel.for_inference(self.model)
-            self._model_label = f"{'fine-tuned' if adapter_exists else 'base'} (unsloth)"
+            kwargs = {"device_map": "auto"}
+            if LOAD_IN_4BIT:
+                from transformers import BitsAndBytesConfig
+                kwargs["quantization_config"] = BitsAndBytesConfig(
+                    load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16
+                )
+            else:
+                kwargs["torch_dtype"] = torch.bfloat16
+
+            self.model = AutoModelForCausalLM.from_pretrained(BASE_MODEL_ID, **kwargs)
+
+            if adapter_exists:
+                from peft import PeftModel
+                self.model = PeftModel.from_pretrained(self.model, self.model_path)
+                self._model_label = "fine-tuned (LoRA adapter)"
+            else:
+                self._model_label = "base (no adapter found)"
+
+            self.model.eval()
+            print(f"[ResponseGenerator] Loaded: {self._model_label}")
         except Exception as e:
-            print(f"[ResponseGenerator] Unsloth load failed: {e}")
-            if self.use_base_fallback:
-                self._load_hf_fallback(adapter_exists)
-
-    def _load_hf_fallback(self, adapter_exists: bool):
-        from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-        import torch
-
-        model_id = self.model_path if adapter_exists else BASE_MODEL_ID
-        self.tokenizer = AutoTokenizer.from_pretrained(model_id)
-        kwargs = {"device_map": "auto"}
-        if LOAD_IN_4BIT:
-            kwargs["quantization_config"] = BitsAndBytesConfig(
-                load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16
-            )
-        else:
-            kwargs["torch_dtype"] = torch.bfloat16
-        self.model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
-        self._model_label = "hf-fallback"
+            print(f"[ResponseGenerator] Model load failed: {e}")
+            self.model = None
 
     def generate(self, query: str, context_chunks: list[dict], intent: str) -> GenerationResult:
         if self.model is None:

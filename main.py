@@ -7,15 +7,8 @@ import argparse
 import os
 import sys
 
-# ROCm environment setup
-os.environ.setdefault("HSA_OVERRIDE_GFX_VERSION", "11.0.0")
+# ROCm allocator tuning (no GFX override — MI300X is natively supported)
 os.environ.setdefault("PYTORCH_HIP_ALLOC_CONF", "max_split_size_mb:512")
-
-# Unsloth must be imported before transformers/trl so its patches apply
-try:
-    import unsloth  # noqa: F401
-except ImportError:
-    pass
 
 
 def run_cli():
