@@ -45,8 +45,8 @@ def load_model():
     model = AutoModelForCausalLM.from_pretrained(BASE_MODEL_ID, **kwargs)
 
     lora_config = LoraConfig(
-        r=16,
-        lora_alpha=16,
+        r=32,           # more capacity — code↔meaning bindings are memorization
+        lora_alpha=32,
         lora_dropout=0.05,
         bias="none",
         task_type="CAUSAL_LM",
@@ -107,7 +107,7 @@ def train():
 
     training_args = TrainingArguments(
         output_dir=ADAPTER_DIR,
-        num_train_epochs=8,  # entity binding (code→meaning) needs the extra passes
+        num_train_epochs=12,  # entity binding (code→meaning) needs the extra passes
         per_device_train_batch_size=8,
         gradient_accumulation_steps=1,
         warmup_steps=2,

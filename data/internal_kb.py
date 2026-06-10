@@ -54,6 +54,23 @@ INTERNAL_QA = [
      "variants": ["Does the B-309 code cost anything?"],
      "answer": "No — B-309 is a $0 informational line item. It only confirms that data roaming was blocked on the line to protect the customer from pay-per-use charges abroad. Nothing is due for it."},
 
+    # ── Reverse lookups (bidirectional code↔meaning binding) ─────────────────
+    {"question": "Which billing code marks a prorated plan-change adjustment?",
+     "variants": ["What code appears when a plan is switched mid-cycle?"],
+     "answer": "That's B-204. It appears after a mid-cycle plan switch: the old plan's rate is billed up to the change date and the new plan's rate after it — a one-time line item."},
+    {"question": "Which code appears when a late fee gets waived?",
+     "variants": ["What's the code for a late-fee reversal?"],
+     "answer": "That's B-117 — the late-fee reversal credit. It shows as a negative amount when a previously charged $5 late fee has been waived."},
+    {"question": "Which code confirms data roaming was blocked on a line?",
+     "variants": ["What's the code for the roaming block notification?"],
+     "answer": "That's B-309 — a $0 informational line item confirming data roaming was blocked to protect the customer from pay-per-use charges abroad."},
+    {"question": "Which billing code is the final device installment payment?",
+     "variants": ["What code shows when a device plan is fully paid off?"],
+     "answer": "That's B-552 — the final device installment. After it's paid, the device is fully paid off and becomes eligible for unlocking (U-100 confirms eligibility on the next bill)."},
+    {"question": "Which code is the goodwill service credit?",
+     "variants": ["What's the code agents use for goodwill credits?"],
+     "answer": "That's C-88 — the goodwill service credit issued by care agents for service disruptions or billing inconveniences. It applies directly against the current balance and doesn't expire."},
+
     # ── CPE / router hardware ────────────────────────────────────────────────
     {"question": "The LOS light on my HG-2410 gateway is red. What do I do?",
      "variants": ["My HG-2410 has a red LOS light and no internet.",
