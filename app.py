@@ -289,6 +289,13 @@ with tab_quality:
                           delta_color="inverse")
                 e3.metric("Eval wall time", f"{eff['ft_seconds']:.0f}s",
                           delta=f"vs base {eff['base_seconds']:.0f}s", delta_color="off")
+            if eff:
+                st.caption("Tokens per answer (same questions, same grounding)")
+                st.bar_chart(pd.DataFrame({
+                    "tokens/answer": {
+                        "base": eff["base_tokens"] // max(tot["n"], 1),
+                        "fine-tuned": eff["ft_tokens"] // max(tot["n"], 1),
+                    }}), height=170)
             st.caption(f"18 held-out questions · internal codes are synthetic — a base "
                        f"model cannot know them · model: {ev.get('model', '')}")
         else:

@@ -183,7 +183,8 @@ Fixes applied, in order of impact:
 4. **LoRA rank 16→32** — binding is memorization; give it capacity
 5. **Epochs 8→12**
 
-Result progression on internal_billing: 0% → 40% → (final run pending).
+Result progression on internal_billing: **0% → 40% → 80%** (fix 1–2 got it to
+40; reverse lookups + rank 32 doubled it).
 **Learning: small-data fine-tuning learns style fast, facts slower, and
 fact-to-entity bindings slowest. Build the eval before trusting the demo.**
 
@@ -218,18 +219,20 @@ same-memory comparisons.)
 - The rubric was verified satisfiable: every required fact group exists in the
   corresponding training answer.
 
-**Confirmed results (checkpointed run, 14B):**
+**Final results (locked model: r=32, 12 epochs, 168 samples):**
 
 | Category | n | Base | Fine-tuned |
 |---|---|---|---|
 | general_telecom | 5 | 80% | 100% |
-| internal_billing | 5 | 0% | 40% |
+| internal_billing | 5 | 0% | 80% |
 | internal_errors | 4 | 0% | 100% |
 | internal_hardware | 4 | 0% | 100% |
-| **TOTAL** | **18** | **22%** | **83%** |
+| **TOTAL** | **18** | **22%** | **94%** |
 
-Efficiency: base 302 tok/answer vs fine-tuned 79 (−74%); wall time −49%.
-*(A further run with reverse-lookup data and r=32 targets the billing gap.)*
+Efficiency: base 302 tok/answer vs fine-tuned 78 (−74%); wall time −51%.
+Note also the base model's tokens: it hit the 320-token budget on almost every
+question — chain-of-thought rambling without answering. The fine-tuned model
+averages 78 tokens and stops cleanly.
 
 ---
 
