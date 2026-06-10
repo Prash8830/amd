@@ -59,8 +59,11 @@ class ResponseGeneratorAgent:
 
             if adapter_exists:
                 from peft import PeftModel
-                self.model = PeftModel.from_pretrained(self.model, self.model_path)
-                self._model_label = "fine-tuned (LoRA adapter)"
+                # merge_and_unload folds the adapter into the base weights —
+                # identical outputs, but no per-token adapter overhead
+                # (unmerged LoRA measured ~25 tok/s vs ~53 tok/s base)
+                self.model = PeftModel.from_pretrained(self.model, self.model_path).merge_and_unload()
+                self._model_label = "fine-tuned (LoRA merged)"
             else:
                 self._model_label = "base (no adapter found)"
 
