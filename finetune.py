@@ -11,13 +11,14 @@ from datasets import Dataset
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    DataCollatorForLanguageModeling,
+    DataCollatorForSeq2Seq,
     Trainer,
     TrainingArguments,
 )
 from peft import LoraConfig, get_peft_model
 
-from data.telecom_dataset import get_alpaca_format
+from data.telecom_dataset import get_dataset
+from agents.response_generator import ALPACA_PROMPT
 from config import BASE_MODEL_ID, ADAPTER_DIR, MAX_SEQ_LENGTH, LOAD_IN_4BIT
 from utils.steps import StepTracker
 
@@ -57,12 +58,32 @@ def load_model():
 
 
 def build_dataset(tokenizer):
-    raw = get_alpaca_format()
+    """Tokenize with completion-only loss masking.
+
+    Loss is computed only on answer tokens (+ EOS), not the prompt — the model
+    learns "produce this answer, then stop" instead of also modeling the
+    instruction text. Uses the tokenizer's native EOS (<|im_end|> for Qwen3);
+    a hardcoded <|endoftext|> taught a weak stop signal, and the model rambled
+    into emoji fluff and self-commentary after its answer.
+    """
+    raw = get_dataset()
 
     def tokenize(sample):
-        return tokenizer(sample["text"], truncation=True, max_length=MAX_SEQ_LENGTH)
+        prompt = ALPACA_PROMPT.format(sample["instruction"])
+        full = prompt + sample["output"] + tokenizer.eos_token
+        prompt_ids = tokenizer(prompt, add_special_tokens=False)["input_ids"]
+        full_ids = tokenizer(full, truncation=True, max_length=MAX_SEQ_LENGTH,
+                             add_special_tokens=False)["input_ids"]
+        prompt_len = min(len(prompt_ids), len(full_ids))
+        labels = [-100] * prompt_len + full_ids[prompt_len:]
+        return {
+            "input_ids": full_ids,
+            "attention_mask": [1] * len(full_ids),
+            "labels": labels,
+        }
 
-    ds = Dataset.from_list(raw).map(tokenize, remove_columns=["text"])
+    ds = Dataset.from_list(raw).map(
+        tokenize, remove_columns=["instruction", "output", "intent"])
     return ds
 
 
@@ -86,7 +107,7 @@ def train():
 
     training_args = TrainingArguments(
         output_dir=ADAPTER_DIR,
-        num_train_epochs=3,
+        num_train_epochs=5,
         per_device_train_batch_size=8,
         gradient_accumulation_steps=1,
         warmup_steps=2,
@@ -105,11 +126,12 @@ def train():
         model=model,
         args=training_args,
         train_dataset=dataset,
-        data_collator=DataCollatorForLanguageModeling(tokenizer, mlm=False),
+        data_collator=DataCollatorForSeq2Seq(tokenizer, label_pad_token_id=-100),
     )
 
+    n_epochs = int(training_args.num_train_epochs)
     n_steps = len(dataset) // training_args.per_device_train_batch_size + 1
-    with steps.step(f"Train — 3 epochs, ~{3 * n_steps} steps (loss prints every step)") as s:
+    with steps.step(f"Train — {n_epochs} epochs, ~{n_epochs * n_steps} steps (loss prints every step)") as s:
         trainer_stats = trainer.train()
         s.note(f"final loss: {trainer_stats.training_loss:.4f}")
 

@@ -42,7 +42,7 @@ def generate(model, tokenizer, prompt):
 
     new_tokens = output_ids[0][input_len:]
     text = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
-    text = text.split("###")[0].strip()
+    text = text.split("###")[0].split("\n---")[0].strip()
     return text, len(new_tokens), elapsed
 
 
