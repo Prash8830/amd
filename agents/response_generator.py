@@ -75,15 +75,21 @@ class ResponseGeneratorAgent:
             print(f"[ResponseGenerator] Model load failed: {e}")
             self.model = None
 
-    def generate(self, query: str, context_chunks: list[dict], intent: str) -> GenerationResult:
+    def generate(self, query: str, context_chunks: list[dict], intent: str,
+                 history: str | None = None) -> GenerationResult:
         if self.model is None:
             return self._mock_generate(query)
 
         context = "\n".join(f"- {c['text']}" for c in context_chunks)
+        # History rides inside the customer-query line so the prompt shape
+        # stays identical to training (model was tuned single-turn)
+        customer_line = (
+            f"(Earlier in this conversation: {history}) {query}" if history else query
+        )
         instruction = (
             f"You are a helpful telecom customer support agent. Intent: {intent}.\n\n"
             f"Relevant knowledge:\n{context}\n\n"
-            f"Customer query: {query}"
+            f"Customer query: {customer_line}"
         )
         prompt = ALPACA_PROMPT.format(instruction)
 

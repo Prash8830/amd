@@ -51,8 +51,18 @@ with st.sidebar:
              "'What does error ERR-1042 mean?') to watch the base model "
              "hallucinate while the fine-tuned one answers correctly.",
     )
+    use_memory = st.toggle(
+        "Conversation memory",
+        value=True,
+        help="Carries recent turns into intent routing, retrieval, and the prompt "
+             "so follow-ups work: 'My router is an HG-2410' → 'the light is red'.",
+    )
+    if st.button("Clear conversation"):
+        st.session_state.messages = []
+        st.rerun()
     st.caption("Try: `What does billing code B-204 mean?` · "
-               "`My HG-2410 LOS light is red` · `eSIM fails with ERR-2077`")
+               "`My HG-2410 LOS light is red` · `eSIM fails with ERR-2077` · "
+               "PII masking: `My number is 555-867-5309 and my net is slow`")
 
 if compare_base and "base_generator" not in st.session_state:
     with st.spinner("Loading base model copy for comparison (~1 min)..."):
@@ -130,7 +140,11 @@ with col_chat:
                     f"pipeline {meta['total_ms']:.0f} ms"
                 )
                 with st.expander("pipeline trace"):
+                    guard_in = ", ".join(meta.get("guard_in", [])) or "clean"
+                    guard_out = ", ".join(meta.get("guard_out", [])) or "clean"
                     st.markdown(
+                        f"- guardrails: `{meta.get('guard_ms', 0):.2f} ms` · "
+                        f"input: `{guard_in}` · output: `{guard_out}`\n"
                         f"- intent classification: `{meta['intent_ms']:.2f} ms`\n"
                         f"- RAG retrieval ({meta['rag_method']}): `{meta['rag_ms']:.1f} ms`\n"
                         f"- generation ({meta['model']}): `{meta['gen_ms']:.0f} ms`"
@@ -166,9 +180,18 @@ with col_obs:
 
 # ── Chat input (top level — triggers full rerun) ─────────────────────────────
 if prompt := st.chat_input("Ask a telecom support question..."):
+    # Conversation memory: last 2 exchanges, compact
+    history = None
+    if use_memory:
+        turns = []
+        for m in st.session_state.messages[-4:]:
+            who = "Customer" if m["role"] == "user" else "Agent"
+            turns.append(f"{who}: {m['content'][:200]}")
+        history = " | ".join(turns) if turns else None
+
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.spinner("Running pipeline..."):
-        r = st.session_state.orchestrator.process(prompt)
+        r = st.session_state.orchestrator.process(prompt, history=history)
 
     base_fields = {}
     if compare_base and "base_generator" in st.session_state:
@@ -197,6 +220,9 @@ if prompt := st.chat_input("Ask a telecom support question..."):
             "rag_method": r.retrieval.retrieval_method,
             "model": r.generation.model_used,
             "chunks": r.retrieval.chunks,
+            "guard_ms": r.guardrail_ms,
+            "guard_in": r.guardrail_input_flags,
+            "guard_out": r.guardrail_output_flags,
         },
     })
     st.session_state.query_log.append({
