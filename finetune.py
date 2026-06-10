@@ -19,15 +19,19 @@ from peft import LoraConfig, get_peft_model
 
 from data.telecom_dataset import get_alpaca_format
 from config import BASE_MODEL_ID, ADAPTER_DIR, MAX_SEQ_LENGTH, LOAD_IN_4BIT
+from utils.steps import StepTracker
 
 os.environ.setdefault("PYTORCH_HIP_ALLOC_CONF", "max_split_size_mb:512")
 
 
-def load_model_and_tokenizer():
+def load_tokenizer():
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_ID)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    return tokenizer
 
+
+def load_model():
     kwargs = {"device_map": "auto"}
     if LOAD_IN_4BIT:
         from transformers import BitsAndBytesConfig
@@ -49,8 +53,7 @@ def load_model_and_tokenizer():
                         "gate_proj", "up_proj", "down_proj"],
     )
     model = get_peft_model(model, lora_config)
-    model.print_trainable_parameters()
-    return model, tokenizer
+    return model
 
 
 def build_dataset(tokenizer):
@@ -64,12 +67,22 @@ def build_dataset(tokenizer):
 
 
 def train():
-    print(f"Loading model and tokenizer ({BASE_MODEL_ID})...")
-    model, tokenizer = load_model_and_tokenizer()
+    steps = StepTracker(total=5, title=f"FINE-TUNING  ·  {BASE_MODEL_ID}  ·  LoRA r=16")
 
-    print("Building dataset...")
-    dataset = build_dataset(tokenizer)
-    print(f"Dataset: {len(dataset)} samples")
+    with steps.step(f"Load tokenizer ({BASE_MODEL_ID})") as s:
+        tokenizer = load_tokenizer()
+        s.note(f"vocab size: {len(tokenizer)}")
+
+    with steps.step("Load model to GPU + attach LoRA adapter") as s:
+        model = load_model()
+        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        total = sum(p.numel() for p in model.parameters())
+        s.note(f"device: {next(model.parameters()).device}, dtype: {next(model.parameters()).dtype}")
+        s.note(f"trainable params: {trainable:,} / {total:,} ({100*trainable/total:.2f}%)")
+
+    with steps.step("Tokenize dataset") as s:
+        dataset = build_dataset(tokenizer)
+        s.note(f"{len(dataset)} samples, max_seq_length={MAX_SEQ_LENGTH}")
 
     training_args = TrainingArguments(
         output_dir=ADAPTER_DIR,
@@ -95,14 +108,19 @@ def train():
         data_collator=DataCollatorForLanguageModeling(tokenizer, mlm=False),
     )
 
-    print("Starting training...")
-    trainer_stats = trainer.train()
-    print(f"Training complete. Loss: {trainer_stats.training_loss:.4f}")
+    n_steps = len(dataset) // training_args.per_device_train_batch_size + 1
+    with steps.step(f"Train — 3 epochs, ~{3 * n_steps} steps (loss prints every step)") as s:
+        trainer_stats = trainer.train()
+        s.note(f"final loss: {trainer_stats.training_loss:.4f}")
 
-    print(f"Saving adapter to {ADAPTER_DIR}...")
-    model.save_pretrained(ADAPTER_DIR)
-    tokenizer.save_pretrained(ADAPTER_DIR)
-    print("Done.")
+    with steps.step(f"Save adapter to {ADAPTER_DIR}") as s:
+        model.save_pretrained(ADAPTER_DIR)
+        tokenizer.save_pretrained(ADAPTER_DIR)
+        import pathlib
+        size_mb = sum(f.stat().st_size for f in pathlib.Path(ADAPTER_DIR).rglob("*") if f.is_file()) / 1e6
+        s.note(f"adapter size: {size_mb:.1f} MB")
+
+    steps.done()
 
 
 if __name__ == "__main__":
