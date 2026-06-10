@@ -87,7 +87,7 @@ def render_gpu_panel():
 
     c1, c2, c3, c4, c5, c6 = st.columns(6)
     c1.metric("GPU util", f"{g.gpu_utilization_pct:.0f}%" if g.available else "N/A")
-    c2.metric("VRAM", f"{g.vram_used_mb/1024:.1f} / {g.vram_total_mb/1024:.0f} GB" if g.available else "N/A")
+    c2.metric("VRAM", f"{g.vram_used_mb/1024:.0f}/{g.vram_total_mb/1024:.0f} GB" if g.available else "N/A")
     c3.metric("GPU temp", f"{g.gpu_temp_c:.0f}°C" if g.available else "N/A")
     c4.metric("Power", f"{g.power_draw_w:.0f} W" if g.available else "N/A")
     c5.metric("CPU", f"{m['cpu_pct']:.0f}%")
