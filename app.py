@@ -1,15 +1,15 @@
 """
-Streamlit Observability Dashboard — AMD Hackathon
-Shows AMD GPU metrics, inference stats, and chat interface.
+Observability Dashboard — Telecom Support Chatbot on AMD ROCm
+Live GPU telemetry, per-stage pipeline latency, and chat — in one screen.
 
-Run: streamlit run app.py
+Run: python main.py --mode ui
+Open: <jupyter-base-url>/proxy/8501/
 """
 
 import time
-import threading
-import queue
 from collections import deque
 
+import pandas as pd
 import streamlit as st
 
 st.set_page_config(
@@ -18,139 +18,158 @@ st.set_page_config(
     layout="wide",
 )
 
-# ── Session state init ────────────────────────────────────────────────────────
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "metrics_history" not in st.session_state:
-    st.session_state.metrics_history = {
-        "time": deque(maxlen=60),
-        "gpu_util": deque(maxlen=60),
-        "vram_used": deque(maxlen=60),
-        "tps": deque(maxlen=60),
-        "latency": deque(maxlen=60),
-    }
+from utils.amd_metrics import get_system_metrics
+from config import BASE_MODEL_ID, ADAPTER_DIR
+
+HISTORY = 120  # ticks of GPU history kept (~4 min at 2s)
+
+
+# ── Session state ─────────────────────────────────────────────────────────────
+def _init_state():
+    ss = st.session_state
+    ss.setdefault("messages", [])
+    ss.setdefault("query_log", [])  # one row per query: tps, latency, stages
+    if "gpu_hist" not in ss:
+        ss.gpu_hist = {k: deque(maxlen=HISTORY) for k in ("t", "util", "vram", "power", "temp")}
+
+
+_init_state()
+
 if "orchestrator" not in st.session_state:
-    with st.spinner("Loading Qwen3-14B model..."):
+    with st.spinner(f"Loading {BASE_MODEL_ID} to GPU — first load takes a minute..."):
         from agents.orchestrator import TelecomOrchestrator
         st.session_state.orchestrator = TelecomOrchestrator()
 
-from utils.amd_metrics import get_system_metrics
+
+def _sample_gpu():
+    m = get_system_metrics()
+    g = m["gpu"]
+    h = st.session_state.gpu_hist
+    h["t"].append(time.strftime("%H:%M:%S"))
+    h["util"].append(g.gpu_utilization_pct)
+    h["vram"].append(g.vram_used_mb / 1024 if g.vram_used_mb else 0)  # GB
+    h["power"].append(g.power_draw_w)
+    h["temp"].append(g.gpu_temp_c)
+    return m
+
 
 # ── Header ────────────────────────────────────────────────────────────────────
-st.title("📡 Telecom Support Chatbot")
-st.caption("Powered by Qwen3-14B QLoRA · AMD ROCm · Multi-Agent Pipeline")
+st.title("📡 Telecom Support Chatbot — AMD ROCm Observability")
+st.caption(
+    f"Fine-tuned **{BASE_MODEL_ID}** (LoRA, merged) · multi-agent pipeline: "
+    "intent → RAG (ChromaDB) → generation · GPU telemetry via rocm-smi"
+)
 
-# ── Layout ────────────────────────────────────────────────────────────────────
-col_chat, col_metrics = st.columns([3, 2])
 
-# ── Metrics panel ─────────────────────────────────────────────────────────────
-with col_metrics:
-    st.subheader("AMD Hardware Metrics")
+# ── Live GPU telemetry (auto-refreshing fragment) ────────────────────────────
+def render_gpu_panel():
+    m = _sample_gpu()
+    g = m["gpu"]
 
-    metrics = get_system_metrics()
-    gpu = metrics["gpu"]
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1.metric("GPU util", f"{g.gpu_utilization_pct:.0f}%" if g.available else "N/A")
+    c2.metric("VRAM", f"{g.vram_used_mb/1024:.1f} / {g.vram_total_mb/1024:.0f} GB" if g.available else "N/A")
+    c3.metric("GPU temp", f"{g.gpu_temp_c:.0f}°C" if g.available else "N/A")
+    c4.metric("Power", f"{g.power_draw_w:.0f} W" if g.available else "N/A")
+    c5.metric("CPU", f"{m['cpu_pct']:.0f}%")
+    c6.metric("RAM", f"{m['ram_used_gb']:.0f} / {m['ram_total_gb']:.0f} GB")
 
-    m1, m2 = st.columns(2)
-    m3, m4 = st.columns(2)
+    h = st.session_state.gpu_hist
+    if len(h["t"]) > 2:
+        g1, g2 = st.columns(2)
+        with g1:
+            st.caption("GPU utilization %")
+            st.area_chart(pd.DataFrame({"util %": list(h["util"])}), height=160)
+        with g2:
+            st.caption("Power draw (W)")
+            st.area_chart(pd.DataFrame({"watts": list(h["power"])}), height=160)
 
-    with m1:
-        gpu_label = f"{gpu.gpu_utilization_pct:.0f}%" if gpu.available else "N/A"
-        st.metric("GPU Utilization", gpu_label)
-    with m2:
-        vram_label = f"{gpu.vram_used_mb:.0f}/{gpu.vram_total_mb:.0f} MB" if gpu.available else "N/A"
-        st.metric("VRAM Used", vram_label)
-    with m3:
-        temp_label = f"{gpu.gpu_temp_c:.0f}°C" if gpu.available else "N/A"
-        st.metric("GPU Temp", temp_label)
-    with m4:
-        power_label = f"{gpu.power_draw_w:.0f}W" if gpu.available else "N/A"
-        st.metric("Power Draw", power_label)
 
-    st.divider()
+if hasattr(st, "fragment"):
+    @st.fragment(run_every="2s")
+    def gpu_panel():
+        render_gpu_panel()
+    gpu_panel()
+else:  # older streamlit — render once per interaction
+    render_gpu_panel()
 
-    m5, m6 = st.columns(2)
-    with m5:
-        st.metric("CPU", f"{metrics['cpu_pct']:.0f}%")
-    with m6:
-        st.metric("RAM", f"{metrics['ram_used_gb']}/{metrics['ram_total_gb']} GB")
+st.divider()
 
-    # Recent inference stats
-    if st.session_state.messages:
-        last = next((m for m in reversed(st.session_state.messages) if m["role"] == "assistant"), None)
-        if last and "stats" in last:
-            st.divider()
-            st.subheader("Last Inference Stats")
-            s = last["stats"]
-            st.metric("Tokens/sec", f"{s['tps']:.1f}")
-            st.metric("Inference Time", f"{s['inference_ms']:.0f}ms")
-            st.metric("Pipeline Latency", f"{s['pipeline_ms']:.0f}ms")
-            st.metric("Model", s["model"])
+# ── Two-column body: chat | inference analytics ──────────────────────────────
+col_chat, col_obs = st.columns([3, 2], gap="large")
 
-    # Charts
-    hist = st.session_state.metrics_history
-    if len(hist["time"]) > 1:
-        st.divider()
-        st.subheader("GPU Utilization Over Time")
-        import pandas as pd
-        df_gpu = pd.DataFrame({"GPU %": list(hist["gpu_util"])})
-        st.line_chart(df_gpu)
-
-        if any(v > 0 for v in hist["tps"]):
-            st.subheader("Tokens/sec Over Time")
-            df_tps = pd.DataFrame({"tok/s": list(hist["tps"])})
-            st.line_chart(df_tps)
-
-# ── Chat panel ────────────────────────────────────────────────────────────────
 with col_chat:
-    st.subheader("Customer Support Chat")
-
-    chat_container = st.container()
-    with chat_container:
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
-                if msg["role"] == "assistant" and "meta" in msg:
-                    meta = msg["meta"]
-                    st.caption(
-                        f"Intent: **{meta['intent']}** ({meta['confidence']:.0%}) · "
-                        f"RAG: {meta['retrieval']} · "
-                        f"{meta['tps']:.1f} tok/s · {meta['pipeline_ms']:.0f}ms"
+    st.subheader("Customer support chat")
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            if msg["role"] == "assistant" and "meta" in msg:
+                meta = msg["meta"]
+                st.caption(
+                    f"intent **{meta['intent']}** ({meta['confidence']:.0%}) · "
+                    f"{meta['tokens']} tok @ **{meta['tps']:.1f} tok/s** · "
+                    f"pipeline {meta['total_ms']:.0f} ms"
+                )
+                with st.expander("pipeline trace"):
+                    st.markdown(
+                        f"- intent classification: `{meta['intent_ms']:.2f} ms`\n"
+                        f"- RAG retrieval ({meta['rag_method']}): `{meta['rag_ms']:.1f} ms`\n"
+                        f"- generation ({meta['model']}): `{meta['gen_ms']:.0f} ms`"
                     )
+                    for c in meta["chunks"]:
+                        st.markdown(f"> {c['text']}")
 
-    if prompt := st.chat_input("Ask a telecom support question..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
+with col_obs:
+    st.subheader("Inference analytics")
+    log = st.session_state.query_log
+    if not log:
+        st.info("Ask a question to populate per-query analytics.")
+    else:
+        df = pd.DataFrame(log)
+        a1, a2, a3 = st.columns(3)
+        a1.metric("Queries", len(df))
+        a2.metric("Avg tok/s", f"{df.tps.mean():.1f}")
+        a3.metric("Avg latency", f"{df.total_ms.mean()/1000:.1f}s")
 
-        with st.spinner("Processing..."):
-            result = st.session_state.orchestrator.process(prompt)
+        st.caption("Tokens/sec per query")
+        st.bar_chart(df[["tps"]], height=160)
 
-        response_text = result.generation.response
-        meta = {
-            "intent": result.intent.intent,
-            "confidence": result.intent.confidence,
-            "retrieval": result.retrieval.retrieval_method,
-            "tps": result.generation.tokens_per_second,
-            "pipeline_ms": result.total_pipeline_ms,
-        }
-        stats = {
-            "tps": result.generation.tokens_per_second,
-            "inference_ms": result.generation.inference_time_ms,
-            "pipeline_ms": result.total_pipeline_ms,
-            "model": result.generation.model_used,
-        }
+        st.caption("Latency breakdown per query (ms)")
+        st.bar_chart(df[["intent_ms", "rag_ms", "gen_ms"]], height=180)
 
-        st.session_state.messages.append({
-            "role": "assistant",
-            "content": response_text,
-            "meta": meta,
-            "stats": stats,
-        })
+        st.caption("Intent distribution")
+        st.bar_chart(df["intent"].value_counts(), height=140)
 
-        # Update metrics history
-        now = time.time()
-        hist["time"].append(now)
-        hist["gpu_util"].append(gpu.gpu_utilization_pct)
-        hist["vram_used"].append(gpu.vram_used_mb)
-        hist["tps"].append(result.generation.tokens_per_second)
-        hist["latency"].append(result.total_pipeline_ms)
 
-        st.rerun()
+# ── Chat input (top level — triggers full rerun) ─────────────────────────────
+if prompt := st.chat_input("Ask a telecom support question..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.spinner("Running pipeline..."):
+        r = st.session_state.orchestrator.process(prompt)
+
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": r.generation.response,
+        "meta": {
+            "intent": r.intent.intent,
+            "confidence": r.intent.confidence,
+            "tokens": r.generation.tokens_generated,
+            "tps": r.generation.tokens_per_second,
+            "total_ms": r.total_pipeline_ms,
+            "intent_ms": r.intent_ms,
+            "rag_ms": r.rag_ms,
+            "gen_ms": r.generation_ms,
+            "rag_method": r.retrieval.retrieval_method,
+            "model": r.generation.model_used,
+            "chunks": r.retrieval.chunks,
+        },
+    })
+    st.session_state.query_log.append({
+        "intent": r.intent.intent,
+        "tps": r.generation.tokens_per_second,
+        "total_ms": r.total_pipeline_ms,
+        "intent_ms": r.intent_ms,
+        "rag_ms": r.rag_ms,
+        "gen_ms": r.generation_ms,
+    })
+    st.rerun()
