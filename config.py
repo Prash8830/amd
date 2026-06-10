@@ -1,15 +1,16 @@
 """Central config — change BASE_MODEL_ID here (or via env var) to swap models.
 
 Pipeline validation: Qwen/Qwen2.5-1.5B  (fast, small)
-Final hackathon run: Qwen/Qwen3-14B     (full size)
+Final hackathon run: Qwen/Qwen3-14B     (full size, current default)
 """
 
 import os
 
-BASE_MODEL_ID = os.environ.get("BASE_MODEL_ID", "Qwen/Qwen2.5-1.5B")
+BASE_MODEL_ID = os.environ.get("BASE_MODEL_ID", "Qwen/Qwen3-14B")
 
-# Fine-tuned adapter output/load path (model-agnostic name so swaps don't break it)
-ADAPTER_DIR = os.environ.get("ADAPTER_DIR", "./models/telecom-qlora")
+# Adapter path is model-specific — a 1.5B adapter can't load onto a 14B base
+_model_slug = BASE_MODEL_ID.split("/")[-1].lower()
+ADAPTER_DIR = os.environ.get("ADAPTER_DIR", f"./models/telecom-qlora-{_model_slug}")
 
 # 4-bit saves VRAM but adds dequant overhead — pointless on MI300X (206GB) for a
 # small model. Set true when running Qwen3-14B if VRAM is ever a concern.
