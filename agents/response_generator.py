@@ -100,6 +100,8 @@ class ResponseGeneratorAgent:
 
         new_tokens = output_ids[0][input_len:]
         response = self.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+        # Model sometimes runs past its answer and starts a new "### Response:" block
+        response = response.split("###")[0].strip()
         elapsed_ms = (t1 - t0) * 1000
         tps = len(new_tokens) / (t1 - t0) if (t1 - t0) > 0 else 0
 
