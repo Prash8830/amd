@@ -4,6 +4,8 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
+from config import BASE_MODEL_ID, ADAPTER_DIR
+
 
 @dataclass
 class GenerationResult:
@@ -26,7 +28,7 @@ ALPACA_PROMPT = """Below is an instruction that describes a task. Write a respon
 class ResponseGeneratorAgent:
     """Loads fine-tuned or base Qwen3-14B and generates responses."""
 
-    def __init__(self, model_path: str = "./models/qwen3-14b-telecom-qlora", use_base_fallback: bool = True):
+    def __init__(self, model_path: str = ADAPTER_DIR, use_base_fallback: bool = True):
         self.model_path = model_path
         self.use_base_fallback = use_base_fallback
         self.model = None
@@ -45,7 +47,7 @@ class ResponseGeneratorAgent:
         try:
             from unsloth import FastLanguageModel
 
-            model_id = self.model_path if adapter_exists else "Qwen/Qwen3-14B"
+            model_id = self.model_path if adapter_exists else BASE_MODEL_ID
             self.model, self.tokenizer = FastLanguageModel.from_pretrained(
                 model_name=model_id,
                 max_seq_length=2048,
@@ -64,7 +66,7 @@ class ResponseGeneratorAgent:
         import torch
 
         bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16)
-        model_id = self.model_path if adapter_exists else "Qwen/Qwen3-14B"
+        model_id = self.model_path if adapter_exists else BASE_MODEL_ID
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
         self.model = AutoModelForCausalLM.from_pretrained(
             model_id, quantization_config=bnb_config, device_map="auto"

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from agents.intent_classifier import IntentClassifierAgent, IntentResult
 from agents.rag_agent import RAGAgent, RetrievalResult
 from agents.response_generator import ResponseGeneratorAgent, GenerationResult
+from config import ADAPTER_DIR
 
 
 @dataclass
@@ -22,7 +23,7 @@ class PipelineResult:
 class TelecomOrchestrator:
     """Coordinates the three-agent pipeline for telecom support queries."""
 
-    def __init__(self, model_path: str = "./models/qwen3-14b-telecom-qlora"):
+    def __init__(self, model_path: str = ADAPTER_DIR):
         print("[Orchestrator] Initializing agents...")
         self.classifier = IntentClassifierAgent()
         self.rag = RAGAgent(use_chromadb=True)

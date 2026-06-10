@@ -1,6 +1,12 @@
 # Telecom Support Chatbot — AMD Hackathon
 
-Fine-tuned **Qwen3-14B QLoRA** telecom customer support chatbot with multi-agent RAG pipeline and AMD GPU observability dashboard.
+Fine-tuned **Qwen QLoRA** telecom customer support chatbot with multi-agent RAG pipeline and AMD GPU observability dashboard.
+
+**Model selection** is centralized in `config.py` — currently `Qwen/Qwen2.5-1.5B` for fast pipeline validation. Swap to `Qwen/Qwen3-14B` for the final run by editing `config.py` or setting the env var:
+
+```bash
+BASE_MODEL_ID=Qwen/Qwen3-14B python main.py --mode finetune
+```
 
 ## Architecture
 
@@ -30,8 +36,11 @@ cd amd
 # 2. Install dependencies
 pip install -r requirements.txt
 
-# 3a. Fine-tune (run once, ~1-2h on MI300)
+# 3a. Fine-tune (fast with small model; minutes on MI300)
 python main.py --mode finetune
+
+# 3b. Test pipeline (notebook-friendly, no stdin needed)
+python test_pipeline.py
 
 # 3b. Interactive CLI
 python main.py --mode cli

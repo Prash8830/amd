@@ -12,14 +12,14 @@ from transformers import TrainingArguments
 from trl import SFTTrainer
 
 from data.telecom_dataset import get_alpaca_format
+from config import BASE_MODEL_ID, ADAPTER_DIR, MAX_SEQ_LENGTH
 
 # ── ROCm safety ──────────────────────────────────────────────────────────────
 os.environ.setdefault("HSA_OVERRIDE_GFX_VERSION", "11.0.0")   # MI300 / RX7900
 os.environ.setdefault("PYTORCH_HIP_ALLOC_CONF", "max_split_size_mb:512")
 
-MODEL_ID = "Qwen/Qwen3-14B"
-OUTPUT_DIR = "./models/qwen3-14b-telecom-qlora"
-MAX_SEQ_LENGTH = 2048
+MODEL_ID = BASE_MODEL_ID
+OUTPUT_DIR = ADAPTER_DIR
 
 
 def load_model_and_tokenizer():
@@ -55,7 +55,7 @@ def build_dataset(tokenizer):
 
 
 def train():
-    print("Loading model and tokenizer...")
+    print(f"Loading model and tokenizer ({MODEL_ID})...")
     model, tokenizer = load_model_and_tokenizer()
 
     print("Building dataset...")
