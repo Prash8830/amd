@@ -107,7 +107,7 @@ def train():
 
     training_args = TrainingArguments(
         output_dir=ADAPTER_DIR,
-        num_train_epochs=5,
+        num_train_epochs=8,  # entity binding (code→meaning) needs the extra passes
         per_device_train_batch_size=8,
         gradient_accumulation_steps=1,
         warmup_steps=2,
