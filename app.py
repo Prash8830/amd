@@ -40,6 +40,25 @@ if "orchestrator" not in st.session_state:
         from agents.orchestrator import TelecomOrchestrator
         st.session_state.orchestrator = TelecomOrchestrator()
 
+# ── Sidebar: demo controls ────────────────────────────────────────────────────
+with st.sidebar:
+    st.header("Demo controls")
+    compare_base = st.toggle(
+        "Hallucination check: also ask the base model",
+        value=False,
+        help="Loads a second, un-fine-tuned copy of the model (~28 GB VRAM) and "
+             "answers every query with both. Ask about internal codes (e.g. "
+             "'What does error ERR-1042 mean?') to watch the base model "
+             "hallucinate while the fine-tuned one answers correctly.",
+    )
+    st.caption("Try: `What does billing code B-204 mean?` · "
+               "`My HG-2410 LOS light is red` · `eSIM fails with ERR-2077`")
+
+if compare_base and "base_generator" not in st.session_state:
+    with st.spinner("Loading base model copy for comparison (~1 min)..."):
+        from agents.response_generator import ResponseGeneratorAgent
+        st.session_state.base_generator = ResponseGeneratorAgent(use_adapter=False)
+
 
 def _sample_gpu():
     m = get_system_metrics()
@@ -118,6 +137,10 @@ with col_chat:
                     )
                     for c in meta["chunks"]:
                         st.markdown(f"> {c['text']}")
+                if "base_response" in msg:
+                    with st.expander("⚠️ base model (no fine-tuning) answered"):
+                        st.markdown(msg["base_response"])
+                        st.caption(msg["base_caption"])
 
 with col_obs:
     st.subheader("Inference analytics")
@@ -147,9 +170,21 @@ if prompt := st.chat_input("Ask a telecom support question..."):
     with st.spinner("Running pipeline..."):
         r = st.session_state.orchestrator.process(prompt)
 
+    base_fields = {}
+    if compare_base and "base_generator" in st.session_state:
+        with st.spinner("Asking the base model the same question..."):
+            bg = st.session_state.base_generator.generate(
+                prompt, r.retrieval.chunks, r.intent.intent)
+        base_fields = {
+            "base_response": bg.response,
+            "base_caption": f"{bg.tokens_generated} tok @ {bg.tokens_per_second:.1f} tok/s · "
+                            f"{bg.inference_time_ms:.0f} ms",
+        }
+
     st.session_state.messages.append({
         "role": "assistant",
         "content": r.generation.response,
+        **base_fields,
         "meta": {
             "intent": r.intent.intent,
             "confidence": r.intent.confidence,

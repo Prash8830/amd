@@ -28,8 +28,9 @@ ALPACA_PROMPT = """Below is an instruction that describes a task. Write a respon
 class ResponseGeneratorAgent:
     """Loads base Qwen (+ LoRA adapter if trained) and generates responses."""
 
-    def __init__(self, model_path: str = ADAPTER_DIR):
+    def __init__(self, model_path: str = ADAPTER_DIR, use_adapter: bool = True):
         self.model_path = model_path
+        self.use_adapter = use_adapter
         self.model = None
         self.tokenizer = None
         self._model_label = "unloaded"
@@ -41,7 +42,8 @@ class ResponseGeneratorAgent:
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         adapter_path = Path(self.model_path)
-        adapter_exists = adapter_path.exists() and (adapter_path / "adapter_config.json").exists()
+        adapter_exists = (self.use_adapter and adapter_path.exists()
+                          and (adapter_path / "adapter_config.json").exists())
 
         try:
             self.tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_ID)
@@ -65,7 +67,7 @@ class ResponseGeneratorAgent:
                 self.model = PeftModel.from_pretrained(self.model, self.model_path).merge_and_unload()
                 self._model_label = "fine-tuned (LoRA merged)"
             else:
-                self._model_label = "base (no adapter found)"
+                self._model_label = "base" if not self.use_adapter else "base (no adapter found)"
 
             self.model.eval()
             print(f"[ResponseGenerator] Loaded: {self._model_label}")

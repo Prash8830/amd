@@ -5,9 +5,9 @@ import re
 from dataclasses import dataclass
 
 INTENTS = {
-    "billing": ["bill", "charge", "payment", "invoice", "autopay", "fee", "refund", "overcharge", "due", "balance"],
-    "network": ["signal", "coverage", "slow", "speed", "5g", "4g", "lte", "connection", "wifi", "roaming", "data", "volte", "drop"],
-    "device": ["phone", "device", "unlock", "screen", "battery", "hardware", "broken", "repair", "warranty", "transfer"],
+    "billing": ["bill", "billing", "charge", "payment", "invoice", "autopay", "fee", "refund", "overcharge", "due", "balance", "statement", "credit"],
+    "network": ["signal", "coverage", "slow", "speed", "5g", "4g", "lte", "connection", "wifi", "roaming", "data", "volte", "drop", "fiber", "ont", "los", "outage", "voicemail", "internet"],
+    "device": ["phone", "device", "unlock", "screen", "battery", "hardware", "broken", "repair", "warranty", "transfer", "router", "modem", "gateway", "mesh", "extender", "sim", "esim", "activating", "activation"],
     "plan": ["plan", "upgrade", "downgrade", "unlimited", "international", "add line", "change", "package"],
     "account": ["account", "password", "login", "profile", "cancel", "port", "number", "email", "address", "settings"],
 }

@@ -205,14 +205,18 @@ TELECOM_QA = [
 ]
 
 
-def _kb_chunks_for_intent(intent: str) -> list[str]:
-    """KB chunks matching the intent — mirrors what the RAG agent retrieves at
-    inference time, so training prompts have the same shape as production ones."""
+def _repo_root_on_path():
     import sys
     from pathlib import Path
     root = str(Path(__file__).resolve().parent.parent)
     if root not in sys.path:
         sys.path.insert(0, root)
+
+
+def _kb_chunks_for_intent(intent: str) -> list[str]:
+    """KB chunks matching the intent — mirrors what the RAG agent retrieves at
+    inference time, so training prompts have the same shape as production ones."""
+    _repo_root_on_path()
     from agents.rag_agent import TELECOM_KB
     matching = [k["text"] for k in TELECOM_KB if k["category"] == intent]
     if not matching:  # "general" — RAG still returns top-3 of something
@@ -225,21 +229,32 @@ def get_dataset():
 
     The instruction format must match agents/response_generator.py exactly —
     a train/inference prompt mismatch makes the model ignore the RAG context
-    and hallucinate policies (observed on Qwen3-14B compare runs).
+    and hallucinate policies (observed on Qwen3-14B compare runs). For the
+    same reason each question is labeled by the REAL intent classifier, so
+    the Intent line at train time always equals what production produces.
+
+    Includes the proprietary internal-knowledge layer (data/internal_kb.py):
+    billing codes, CPE hardware, error codes — the fine-tuning testbed.
     """
+    _repo_root_on_path()
+    from agents.intent_classifier import IntentClassifierAgent
+    from data.internal_kb import INTERNAL_QA
+
+    classifier = IntentClassifierAgent()
     samples = []
-    for item in TELECOM_QA:
-        context = "\n".join(f"- {c}" for c in _kb_chunks_for_intent(item["intent"]))
+    for item in TELECOM_QA + INTERNAL_QA:
         questions = [item["question"]] + item.get("variants", [])
         for q in questions:
+            intent = classifier.classify(q).intent
+            context = "\n".join(f"- {c}" for c in _kb_chunks_for_intent(intent))
             samples.append({
                 "instruction": (
-                    f"You are a helpful telecom customer support agent. Intent: {item['intent']}.\n\n"
+                    f"You are a helpful telecom customer support agent. Intent: {intent}.\n\n"
                     f"Relevant knowledge:\n{context}\n\n"
                     f"Customer query: {q}"
                 ),
                 "output": item["answer"],
-                "intent": item["intent"],
+                "intent": intent,
             })
     return samples
 
@@ -265,7 +280,8 @@ def get_alpaca_format():
 if __name__ == "__main__":
     ds = get_dataset()
     from collections import Counter
+    from data.internal_kb import INTERNAL_QA
     print(f"Total training samples: {len(ds)}")
-    print(f"Unique answers: {len(TELECOM_QA)}")
+    print(f"Unique answers: {len(TELECOM_QA) + len(INTERNAL_QA)} ({len(INTERNAL_QA)} proprietary)")
     for intent, n in Counter(s["intent"] for s in ds).most_common():
         print(f"  {intent:8s}: {n}")

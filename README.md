@@ -42,6 +42,11 @@ python main.py --mode finetune
 # 3b. Test pipeline (notebook-friendly, no stdin needed)
 python test_pipeline.py
 
+# 3c. Measure accuracy: base vs fine-tuned on held-out questions
+#     (internal billing codes / hardware / error codes — facts a base
+#      model cannot know — plus public telecom questions)
+python evaluate.py        # prints accuracy table, writes eval_results.json
+
 # 3b. Interactive CLI
 python main.py --mode cli
 
