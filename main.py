@@ -11,6 +11,12 @@ import sys
 os.environ.setdefault("HSA_OVERRIDE_GFX_VERSION", "11.0.0")
 os.environ.setdefault("PYTORCH_HIP_ALLOC_CONF", "max_split_size_mb:512")
 
+# Unsloth must be imported before transformers/trl so its patches apply
+try:
+    import unsloth  # noqa: F401
+except ImportError:
+    pass
+
 
 def run_cli():
     from agents.orchestrator import TelecomOrchestrator

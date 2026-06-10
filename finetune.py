@@ -6,6 +6,13 @@ Run: python finetune.py
 """
 
 import os
+
+# Unsloth must be imported before transformers/trl so its patches apply
+try:
+    import unsloth  # noqa: F401
+except ImportError:
+    pass
+
 import torch
 from datasets import Dataset
 from transformers import TrainingArguments

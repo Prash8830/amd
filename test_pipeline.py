@@ -3,6 +3,12 @@
 Run: python test_pipeline.py
 """
 
+# Unsloth must be imported before transformers/trl so its patches apply
+try:
+    import unsloth  # noqa: F401
+except ImportError:
+    pass
+
 from agents.orchestrator import TelecomOrchestrator
 
 TEST_QUERIES = [

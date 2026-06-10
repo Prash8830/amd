@@ -1,6 +1,13 @@
 """FastAPI backend — exposes /chat and /health endpoints."""
 
 from __future__ import annotations
+
+# Unsloth must be imported before transformers/trl so its patches apply
+try:
+    import unsloth  # noqa: F401
+except ImportError:
+    pass
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 

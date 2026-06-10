@@ -10,6 +10,12 @@ import threading
 import queue
 from collections import deque
 
+# Unsloth must be imported before transformers/trl so its patches apply
+try:
+    import unsloth  # noqa: F401
+except ImportError:
+    pass
+
 import streamlit as st
 
 st.set_page_config(
