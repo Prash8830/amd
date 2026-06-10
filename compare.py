@@ -22,7 +22,7 @@ QUERIES = [
     "Can I upgrade to the unlimited plan?",
 ]
 
-MAX_NEW_TOKENS = 200
+MAX_NEW_TOKENS = 320
 
 
 def generate(model, tokenizer, prompt):
@@ -35,6 +35,7 @@ def generate(model, tokenizer, prompt):
             **inputs,
             max_new_tokens=MAX_NEW_TOKENS,
             do_sample=False,  # greedy — deterministic, fair comparison
+            repetition_penalty=1.15,
             pad_token_id=tokenizer.eos_token_id,
         )
     elapsed = time.perf_counter() - t0

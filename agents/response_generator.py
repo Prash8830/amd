@@ -93,10 +93,11 @@ class ResponseGeneratorAgent:
         with torch.no_grad():
             output_ids = self.model.generate(
                 **inputs,
-                max_new_tokens=256,
+                max_new_tokens=320,
                 temperature=0.7,
                 top_p=0.9,
                 do_sample=True,
+                repetition_penalty=1.15,
                 pad_token_id=self.tokenizer.eos_token_id,
             )
         t1 = time.perf_counter()

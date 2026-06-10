@@ -205,14 +205,39 @@ TELECOM_QA = [
 ]
 
 
+def _kb_chunks_for_intent(intent: str) -> list[str]:
+    """KB chunks matching the intent — mirrors what the RAG agent retrieves at
+    inference time, so training prompts have the same shape as production ones."""
+    import sys
+    from pathlib import Path
+    root = str(Path(__file__).resolve().parent.parent)
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    from agents.rag_agent import TELECOM_KB
+    matching = [k["text"] for k in TELECOM_KB if k["category"] == intent]
+    if not matching:  # "general" — RAG still returns top-3 of something
+        matching = [TELECOM_KB[0]["text"], TELECOM_KB[3]["text"], TELECOM_KB[10]["text"]]
+    return matching[:3]
+
+
 def get_dataset():
-    """Return dataset as instruction-response pairs, expanding question variants."""
+    """Return dataset as instruction-response pairs, expanding question variants.
+
+    The instruction format must match agents/response_generator.py exactly —
+    a train/inference prompt mismatch makes the model ignore the RAG context
+    and hallucinate policies (observed on Qwen3-14B compare runs).
+    """
     samples = []
     for item in TELECOM_QA:
+        context = "\n".join(f"- {c}" for c in _kb_chunks_for_intent(item["intent"]))
         questions = [item["question"]] + item.get("variants", [])
         for q in questions:
             samples.append({
-                "instruction": f"You are a helpful telecom customer support agent. Answer the following customer query professionally and concisely.\n\nCustomer query: {q}",
+                "instruction": (
+                    f"You are a helpful telecom customer support agent. Intent: {item['intent']}.\n\n"
+                    f"Relevant knowledge:\n{context}\n\n"
+                    f"Customer query: {q}"
+                ),
                 "output": item["answer"],
                 "intent": item["intent"],
             })
