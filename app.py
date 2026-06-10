@@ -1,140 +1,109 @@
 """
-Observability Dashboard — Telecom Support Chatbot on AMD ROCm
-Live GPU telemetry, per-stage pipeline latency, and chat — in one screen.
+TruthLine — enterprise console.
 
-Run: python main.py --mode ui
-Open: <jupyter-base-url>/proxy/8501/
+Tabs: Support Console · Observability · Governance · Model Quality & Flywheel
+Run: python main.py --mode ui   ·   Open: <jupyter-base-url>/proxy/8501/
 """
 
+import json
+import os
 import time
 from collections import deque
 
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(
-    page_title="Telecom Chatbot — AMD ROCm",
-    page_icon="📡",
-    layout="wide",
-)
+from config import BASE_MODEL_ID, PRODUCT_NAME, PRODUCT_TAGLINE
+
+st.set_page_config(page_title=f"{PRODUCT_NAME} — AMD ROCm", page_icon="📡", layout="wide")
 
 from utils.amd_metrics import get_system_metrics
-from config import BASE_MODEL_ID, ADAPTER_DIR
 
-HISTORY = 120  # ticks of GPU history kept (~4 min at 2s)
+HISTORY = 120  # GPU history ticks (~4 min at 2s)
 
 
 # ── Session state ─────────────────────────────────────────────────────────────
-def _init_state():
-    ss = st.session_state
-    ss.setdefault("messages", [])
-    ss.setdefault("query_log", [])  # one row per query: tps, latency, stages
-    if "gpu_hist" not in ss:
-        ss.gpu_hist = {k: deque(maxlen=HISTORY) for k in ("t", "util", "vram", "power", "temp")}
+ss = st.session_state
+ss.setdefault("messages", [])
+ss.setdefault("query_log", [])
+if "gpu_hist" not in ss:
+    ss.gpu_hist = {k: deque(maxlen=HISTORY) for k in ("t", "util", "vram", "power", "temp")}
 
-
-_init_state()
-
-if "orchestrator" not in st.session_state:
+if "orchestrator" not in ss:
     with st.spinner(f"Loading {BASE_MODEL_ID} to GPU — first load takes a minute..."):
         from agents.orchestrator import TelecomOrchestrator
-        st.session_state.orchestrator = TelecomOrchestrator()
-
-# ── Sidebar: demo controls ────────────────────────────────────────────────────
-with st.sidebar:
-    st.header("Demo controls")
-    compare_base = st.toggle(
-        "Hallucination check: also ask the base model",
-        value=False,
-        help="Loads a second, un-fine-tuned copy of the model (~28 GB VRAM) and "
-             "answers every query with both. Ask about internal codes (e.g. "
-             "'What does error ERR-1042 mean?') to watch the base model "
-             "hallucinate while the fine-tuned one answers correctly.",
-    )
-    use_memory = st.toggle(
-        "Conversation memory",
-        value=True,
-        help="Carries recent turns into intent routing, retrieval, and the prompt "
-             "so follow-ups work: 'My router is an HG-2410' → 'the light is red'.",
-    )
-    if st.button("Clear conversation"):
-        st.session_state.messages = []
-        st.rerun()
-
-    router_on = st.session_state.orchestrator.fast_generator is not None
-    st.caption(("🔀 Model router: **active** (1.5B fast + 14B expert)" if router_on
-                else "Model router: single-model mode — train the fast adapter with "
-                     "`BASE_MODEL_ID=Qwen/Qwen2.5-1.5B python main.py --mode finetune`"))
-    st.caption("Try: `What does billing code B-204 mean?` · "
-               "`My HG-2410 LOS light is red` · `eSIM fails with ERR-2077` · "
-               "PII masking: `My number is 555-867-5309 and my net is slow`")
-
-if compare_base and "base_generator" not in st.session_state:
-    with st.spinner("Loading base model copy for comparison (~1 min)..."):
-        from agents.response_generator import ResponseGeneratorAgent
-        st.session_state.base_generator = ResponseGeneratorAgent(use_adapter=False)
+        ss.orchestrator = TelecomOrchestrator()
 
 
 def _sample_gpu():
     m = get_system_metrics()
     g = m["gpu"]
-    h = st.session_state.gpu_hist
+    h = ss.gpu_hist
     h["t"].append(time.strftime("%H:%M:%S"))
     h["util"].append(g.gpu_utilization_pct)
-    h["vram"].append(g.vram_used_mb / 1024 if g.vram_used_mb else 0)  # GB
+    h["vram"].append(g.vram_used_mb / 1024 if g.vram_used_mb else 0)
     h["power"].append(g.power_draw_w)
     h["temp"].append(g.gpu_temp_c)
     return m
 
 
+# ── Sidebar: product + demo controls ─────────────────────────────────────────
+with st.sidebar:
+    st.markdown(f"## 📡 {PRODUCT_NAME}")
+    st.caption(PRODUCT_TAGLINE)
+    st.divider()
+    st.header("Demo controls")
+    compare_base = st.toggle(
+        "Hallucination check: also ask the base model",
+        value=False,
+        help="Loads a second, un-fine-tuned copy of the model (~28 GB VRAM) and "
+             "answers every query with both. Ask about internal codes to watch "
+             "the base model hallucinate while the fine-tuned one answers correctly.",
+    )
+    use_memory = st.toggle(
+        "Conversation memory",
+        value=True,
+        help="Carries recent turns into routing, retrieval, and the prompt so "
+             "follow-ups work: 'My router is an HG-2410' → 'the light is red'.",
+    )
+    if st.button("Clear conversation"):
+        ss.messages = []
+        st.rerun()
+
+    router_on = ss.orchestrator.fast_generator is not None
+    st.caption(("🔀 Model router: **active** (1.5B fast + 14B expert)" if router_on
+                else "Model router: single-model mode — train the fast adapter with "
+                     "`BASE_MODEL_ID=Qwen/Qwen2.5-1.5B python main.py --mode finetune`"))
+    st.divider()
+    st.caption("**Try:** `What does billing code B-204 mean?` · "
+               "`My HG-2410 LOS light is red` · `eSIM fails with ERR-2077` · "
+               "`it's not working` (clarity gate) · "
+               "`My number is 555-867-5309 and my net is slow` (PII masking)")
+
+if compare_base and "base_generator" not in ss:
+    with st.spinner("Loading base model copy for comparison (~1 min)..."):
+        from agents.response_generator import ResponseGeneratorAgent
+        ss.base_generator = ResponseGeneratorAgent(use_adapter=False)
+
+
 # ── Header ────────────────────────────────────────────────────────────────────
-st.title("📡 Telecom Support Chatbot — AMD ROCm Observability")
+st.title(f"📡 {PRODUCT_NAME}")
 st.caption(
-    f"Fine-tuned **{BASE_MODEL_ID}** (LoRA, merged) · multi-agent pipeline: "
-    "intent → RAG (ChromaDB) → generation · GPU telemetry via rocm-smi"
+    f"{PRODUCT_TAGLINE} · **{BASE_MODEL_ID}** (LoRA, merged) · "
+    "pipeline: guardrails → clarity → cache → intent → RAG → router → generation → trust gate"
 )
 
-
-# ── Live GPU telemetry (auto-refreshing fragment) ────────────────────────────
-def render_gpu_panel():
-    m = _sample_gpu()
-    g = m["gpu"]
-
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("GPU util", f"{g.gpu_utilization_pct:.0f}%" if g.available else "N/A")
-    c2.metric("VRAM", f"{g.vram_used_mb/1024:.0f}/{g.vram_total_mb/1024:.0f} GB" if g.available else "N/A")
-    c3.metric("GPU temp", f"{g.gpu_temp_c:.0f}°C" if g.available else "N/A")
-    c4.metric("Power", f"{g.power_draw_w:.0f} W" if g.available else "N/A")
-    c5.metric("CPU", f"{m['cpu_pct']:.0f}%")
-    c6.metric("RAM", f"{m['ram_used_gb']:.0f} / {m['ram_total_gb']:.0f} GB")
-
-    h = st.session_state.gpu_hist
-    if len(h["t"]) > 2:
-        g1, g2 = st.columns(2)
-        with g1:
-            st.caption("GPU utilization %")
-            st.area_chart(pd.DataFrame({"util %": list(h["util"])}), height=160)
-        with g2:
-            st.caption("Power draw (W)")
-            st.area_chart(pd.DataFrame({"watts": list(h["power"])}), height=160)
+tab_chat, tab_obs, tab_gov, tab_quality = st.tabs(
+    ["💬 Support console", "📊 Observability", "🛡️ Governance", "🎯 Model quality & flywheel"])
 
 
-if hasattr(st, "fragment"):
-    @st.fragment(run_every="2s")
-    def gpu_panel():
-        render_gpu_panel()
-    gpu_panel()
-else:  # older streamlit — render once per interaction
-    render_gpu_panel()
+# ══ TAB 1 — Support console ═══════════════════════════════════════════════════
+with tab_chat:
+    if not ss.messages:
+        st.info("Ask a question below — every answer carries its full pipeline trace. "
+                "Suggested demo queries are in the sidebar.")
 
-st.divider()
-
-# ── Two-column body: chat | inference analytics ──────────────────────────────
-col_chat, col_obs = st.columns([3, 2], gap="large")
-
-with col_chat:
-    st.subheader("Customer support chat")
-    for i, msg in enumerate(st.session_state.messages):
+    for i, msg in enumerate(ss.messages):
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             if msg["role"] == "assistant" and "meta" in msg:
@@ -168,102 +137,214 @@ with col_chat:
                         st.markdown(msg["base_response"])
                         st.caption(msg["base_caption"])
 
-                # Feedback flywheel: approved answers feed the next fine-tune
                 if msg.get("fb"):
-                    st.caption(f"feedback recorded: {'👍 → next training set' if msg['fb'] == 'approved' else '👎 → review queue'}")
+                    st.caption("feedback recorded: " +
+                               ("👍 → training set + semantic cache" if msg["fb"] == "approved"
+                                else "👎 → review queue"))
                 else:
                     fb1, fb2, _ = st.columns([1, 1, 8])
-                    user_q = next((m["content"] for m in reversed(st.session_state.messages[:i])
+                    user_q = next((m["content"] for m in reversed(ss.messages[:i])
                                    if m["role"] == "user"), "")
                     if fb1.button("👍", key=f"up_{i}"):
                         from data.feedback_store import append_feedback
                         append_feedback(user_q, msg["content"], "approved")
                         msg["fb"] = "approved"
-                        st.session_state.orchestrator.cache.refresh()
+                        ss.orchestrator.cache.refresh()
                         st.rerun()
                     if fb2.button("👎", key=f"down_{i}"):
                         from data.feedback_store import append_feedback
                         append_feedback(user_q, msg["content"], "rejected")
                         msg["fb"] = "rejected"
-                        st.session_state.orchestrator.cache.refresh()
+                        ss.orchestrator.cache.refresh()
                         st.rerun()
 
-with col_obs:
-    st.subheader("Inference analytics")
-    log = st.session_state.query_log
+
+# ══ TAB 2 — Observability ═════════════════════════════════════════════════════
+def render_observability():
+    m = _sample_gpu()
+    g = m["gpu"]
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1.metric("GPU util", f"{g.gpu_utilization_pct:.0f}%" if g.available else "N/A")
+    c2.metric("VRAM", f"{g.vram_used_mb/1024:.0f}/{g.vram_total_mb/1024:.0f} GB" if g.available else "N/A")
+    c3.metric("GPU temp", f"{g.gpu_temp_c:.0f}°C" if g.available else "N/A")
+    c4.metric("Power", f"{g.power_draw_w:.0f} W" if g.available else "N/A")
+    c5.metric("CPU", f"{m['cpu_pct']:.0f}%")
+    c6.metric("RAM", f"{m['ram_used_gb']:.0f}/{m['ram_total_gb']:.0f} GB")
+
+    h = ss.gpu_hist
+    if len(h["t"]) > 2:
+        g1, g2 = st.columns(2)
+        with g1:
+            st.caption("GPU utilization % (rocm-smi, 2s ticks)")
+            st.area_chart(pd.DataFrame({"util %": list(h["util"])}), height=170)
+        with g2:
+            st.caption("Power draw (W)")
+            st.area_chart(pd.DataFrame({"watts": list(h["power"])}), height=170)
+
+
+with tab_obs:
+    st.subheader("AMD MI300X telemetry — live via rocm-smi")
+    if hasattr(st, "fragment"):
+        @st.fragment(run_every="2s")
+        def gpu_panel():
+            render_observability()
+        gpu_panel()
+    else:
+        render_observability()
+
+    st.divider()
+    st.subheader("Inference analytics (this session)")
+    log = ss.query_log
     if not log:
-        st.info("Ask a question to populate per-query analytics.")
+        st.caption("Ask a question in the support console to populate analytics.")
     else:
         df = pd.DataFrame(log)
-        a1, a2, a3 = st.columns(3)
+        a1, a2, a3, a4 = st.columns(4)
         a1.metric("Queries", len(df))
         a2.metric("Avg tok/s", f"{df.tps.mean():.1f}")
         a3.metric("Avg latency", f"{df.total_ms.mean()/1000:.1f}s")
+        zero_gpu = int((df.get("route", pd.Series(dtype=str)) == "cache").sum())
+        a4.metric("Zero-GPU answers", zero_gpu)
 
-        st.caption("Tokens/sec per query")
-        st.bar_chart(df[["tps"]], height=160)
+        b1, b2 = st.columns(2)
+        with b1:
+            st.caption("Latency breakdown per query (ms)")
+            st.bar_chart(df[["intent_ms", "rag_ms", "gen_ms"]], height=190)
+        with b2:
+            st.caption("Serving tier per query (cost right-sizing)")
+            if "route" in df:
+                st.bar_chart(df["route"].value_counts(), height=190)
 
-        st.caption("Latency breakdown per query (ms)")
-        st.bar_chart(df[["intent_ms", "rag_ms", "gen_ms"]], height=180)
-
-        st.caption("Intent distribution")
-        st.bar_chart(df["intent"].value_counts(), height=140)
-
-    # Human-in-the-loop escalation queue
-    escalated = [m for m in st.session_state.messages
-                 if m.get("role") == "assistant" and m.get("meta", {}).get("escalated")]
-    st.divider()
-    st.subheader(f"🔴 Escalation queue ({len(escalated)})")
-    if not escalated:
-        st.caption("No answers below the trust threshold.")
-    for e in escalated:
-        st.warning(f"trust {e['meta']['trust']:.2f} — {e['content'][:160]}...")
-
-    # Data flywheel status
-    from data.feedback_store import load_feedback
-    fb_all = load_feedback()
-    approved_n = sum(1 for f in fb_all if f.get("label") == "approved")
-    st.divider()
-    st.subheader("🔄 Data flywheel")
-    cache_n = st.session_state.orchestrator.cache.size()
-    st.caption(
-        f"**{approved_n}** approved pairs queued for the next fine-tune "
-        f"({len(fb_all) - approved_n} in review). Next `finetune.py` run merges "
-        f"them automatically — a retrain costs ~1 min on MI300X."
-    )
-    st.caption(
-        f"⚡ Semantic cache serving **{cache_n}** human-approved answers — "
-        f"repeat questions cost zero GPU."
-    )
+        c1, c2 = st.columns(2)
+        with c1:
+            st.caption("Tokens/sec per query")
+            st.bar_chart(df[["tps"]], height=170)
+        with c2:
+            st.caption("Intent distribution")
+            st.bar_chart(df["intent"].value_counts(), height=170)
 
 
-# ── Chat input (top level — triggers full rerun) ─────────────────────────────
-if prompt := st.chat_input("Ask a telecom support question..."):
-    # Conversation memory: last 2 exchanges, compact
+# ══ TAB 3 — Governance ════════════════════════════════════════════════════════
+with tab_gov:
+    g1, g2 = st.columns(2)
+
+    with g1:
+        escalated = [m for m in ss.messages
+                     if m.get("role") == "assistant" and m.get("meta", {}).get("escalated")]
+        st.subheader(f"🔴 Human review queue ({len(escalated)})")
+        if not escalated:
+            st.caption("No answers below the trust threshold (0.6).")
+        for e in escalated:
+            st.warning(f"trust {e['meta']['trust']:.2f} — {e['content'][:180]}...")
+
+        if ss.query_log:
+            df = pd.DataFrame(ss.query_log)
+            if "trust" in df:
+                st.caption("Trust score per query (threshold 0.6)")
+                st.line_chart(df[["trust"]], height=170)
+
+    with g2:
+        st.subheader("🛡️ Guardrail activity")
+        events = []
+        for m in ss.messages:
+            meta = m.get("meta", {})
+            for f in meta.get("guard_in", []):
+                events.append({"stage": "input", "event": f})
+            for f in meta.get("guard_out", []):
+                events.append({"stage": "output", "event": f})
+        if not events:
+            st.caption("No PII, injection, or unverified-claim events yet. "
+                       "Try the PII demo query in the sidebar.")
+        else:
+            st.dataframe(pd.DataFrame(events), use_container_width=True, height=240)
+        st.caption(
+            "Input: PII masked + injections blocked **before** the model or logs "
+            "see them. Output: PII leaks redacted; dollar amounts without grounding "
+            "are flagged as `unverified_amount`."
+        )
+
+
+# ══ TAB 4 — Model quality & flywheel ══════════════════════════════════════════
+with tab_quality:
+    q1, q2 = st.columns(2)
+
+    with q1:
+        st.subheader("🎯 Measured accuracy — base vs fine-tuned")
+        if os.path.exists("eval_results.json"):
+            with open("eval_results.json") as f:
+                ev = json.load(f)
+            cats = {k: v for k, v in ev["summary"].items() if k != "TOTAL"}
+            df_acc = pd.DataFrame({
+                "base": {k: v["base_pct"] for k, v in cats.items()},
+                "fine-tuned": {k: v["ft_pct"] for k, v in cats.items()},
+            })
+            st.bar_chart(df_acc, height=240)
+            tot = ev["summary"]["TOTAL"]
+            e1, e2, e3 = st.columns(3)
+            e1.metric("Total accuracy", f"{tot['ft_pct']}%", delta=f"+{tot['ft_pct']-tot['base_pct']} vs base")
+            eff = ev.get("efficiency", {})
+            if eff:
+                e2.metric("Tokens/answer", f"{eff['ft_tokens']//tot['n']}",
+                          delta=f"-{100 - 100*eff['ft_tokens']//max(eff['base_tokens'],1)}%",
+                          delta_color="inverse")
+                e3.metric("Eval wall time", f"{eff['ft_seconds']:.0f}s",
+                          delta=f"vs base {eff['base_seconds']:.0f}s", delta_color="off")
+            st.caption(f"18 held-out questions · internal codes are synthetic — a base "
+                       f"model cannot know them · model: {ev.get('model', '')}")
+        else:
+            st.caption("Run `python evaluate.py` to populate measured accuracy.")
+
+    with q2:
+        st.subheader("🔄 Data flywheel")
+        from data.feedback_store import load_feedback
+        fb_all = load_feedback()
+        approved_n = sum(1 for f in fb_all if f.get("label") == "approved")
+        cache_n = ss.orchestrator.cache.size()
+
+        f1, f2, f3 = st.columns(3)
+        f1.metric("Approved pairs", approved_n)
+        f2.metric("In review", len(fb_all) - approved_n)
+        f3.metric("Cache entries", cache_n)
+
+        st.markdown(
+            "1. 👍 on any answer → pair lands in the **ground-truth DB**\n"
+            "2. **Immediately**: semantic cache serves repeat questions — zero GPU\n"
+            "3. **Next retrain**: `finetune.py` auto-merges approved pairs into "
+            "the training set (~1 min on MI300X)\n"
+            "4. 👎 → review queue for the knowledge team"
+        )
+        if approved_n:
+            with st.expander("approved pairs (next training set)"):
+                for row in fb_all:
+                    if row.get("label") == "approved":
+                        st.markdown(f"**Q:** {row['question'][:120]}\n\n**A:** {row['answer'][:200]}...")
+
+
+# ── Chat input (top level — pinned, works from any tab) ──────────────────────
+if prompt := st.chat_input(f"Ask {PRODUCT_NAME} a telecom support question..."):
     history = None
     if use_memory:
         turns = []
-        for m in st.session_state.messages[-4:]:
+        for m in ss.messages[-4:]:
             who = "Customer" if m["role"] == "user" else "Agent"
             turns.append(f"{who}: {m['content'][:200]}")
         history = " | ".join(turns) if turns else None
 
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    ss.messages.append({"role": "user", "content": prompt})
     with st.spinner("Running pipeline..."):
-        r = st.session_state.orchestrator.process(prompt, history=history)
+        r = ss.orchestrator.process(prompt, history=history)
 
     base_fields = {}
-    if compare_base and "base_generator" in st.session_state:
+    if compare_base and "base_generator" in ss:
         with st.spinner("Asking the base model the same question..."):
-            bg = st.session_state.base_generator.generate(
-                prompt, r.retrieval.chunks, r.intent.intent)
+            bg = ss.base_generator.generate(prompt, r.retrieval.chunks, r.intent.intent)
         base_fields = {
             "base_response": bg.response,
             "base_caption": f"{bg.tokens_generated} tok @ {bg.tokens_per_second:.1f} tok/s · "
                             f"{bg.inference_time_ms:.0f} ms",
         }
 
-    st.session_state.messages.append({
+    ss.messages.append({
         "role": "assistant",
         "content": r.generation.response,
         **base_fields,
@@ -288,12 +369,16 @@ if prompt := st.chat_input("Ask a telecom support question..."):
             "escalated": r.escalated,
         },
     })
-    st.session_state.query_log.append({
+    ss.query_log.append({
         "intent": r.intent.intent,
         "tps": r.generation.tokens_per_second,
         "total_ms": r.total_pipeline_ms,
         "intent_ms": r.intent_ms,
         "rag_ms": r.rag_ms,
         "gen_ms": r.generation_ms,
+        "route": r.route,
+        "trust": r.trust_score,
     })
+    # GPU sample per query keeps charts moving even without the fragment
+    _sample_gpu()
     st.rerun()

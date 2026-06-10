@@ -6,6 +6,10 @@ Final hackathon run: Qwen/Qwen3-14B     (full size, current default)
 
 import os
 
+PRODUCT_NAME = "TruthLine"
+PRODUCT_TAGLINE = ("Hallucination-free telecom support — fine-tuned domain expertise "
+                   "on AMD Instinct MI300X")
+
 BASE_MODEL_ID = os.environ.get("BASE_MODEL_ID", "Qwen/Qwen3-14B")
 
 # Adapter path is model-specific — a 1.5B adapter can't load onto a 14B base
