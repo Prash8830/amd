@@ -4,7 +4,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
-from config import BASE_MODEL_ID, ADAPTER_DIR
+from config import BASE_MODEL_ID, ADAPTER_DIR, LOAD_IN_4BIT, MAX_SEQ_LENGTH
 
 
 @dataclass
@@ -50,9 +50,9 @@ class ResponseGeneratorAgent:
             model_id = self.model_path if adapter_exists else BASE_MODEL_ID
             self.model, self.tokenizer = FastLanguageModel.from_pretrained(
                 model_name=model_id,
-                max_seq_length=2048,
+                max_seq_length=MAX_SEQ_LENGTH,
                 dtype=None,
-                load_in_4bit=True,
+                load_in_4bit=LOAD_IN_4BIT,
             )
             FastLanguageModel.for_inference(self.model)
             self._model_label = f"{'fine-tuned' if adapter_exists else 'base'} (unsloth)"
@@ -65,12 +65,16 @@ class ResponseGeneratorAgent:
         from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
         import torch
 
-        bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16)
         model_id = self.model_path if adapter_exists else BASE_MODEL_ID
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_id, quantization_config=bnb_config, device_map="auto"
-        )
+        kwargs = {"device_map": "auto"}
+        if LOAD_IN_4BIT:
+            kwargs["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16
+            )
+        else:
+            kwargs["torch_dtype"] = torch.bfloat16
+        self.model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
         self._model_label = "hf-fallback"
 
     def generate(self, query: str, context_chunks: list[dict], intent: str) -> GenerationResult:

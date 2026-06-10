@@ -19,7 +19,7 @@ from transformers import TrainingArguments
 from trl import SFTTrainer
 
 from data.telecom_dataset import get_alpaca_format
-from config import BASE_MODEL_ID, ADAPTER_DIR, MAX_SEQ_LENGTH
+from config import BASE_MODEL_ID, ADAPTER_DIR, MAX_SEQ_LENGTH, LOAD_IN_4BIT
 
 # ── ROCm safety ──────────────────────────────────────────────────────────────
 os.environ.setdefault("HSA_OVERRIDE_GFX_VERSION", "11.0.0")   # MI300 / RX7900
@@ -35,8 +35,8 @@ def load_model_and_tokenizer():
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=MODEL_ID,
         max_seq_length=MAX_SEQ_LENGTH,
-        dtype=None,          # auto-detect bf16/fp16
-        load_in_4bit=True,   # QLoRA 4-bit
+        dtype=None,                 # auto-detect bf16/fp16
+        load_in_4bit=LOAD_IN_4BIT,  # off for small-model validation (faster)
     )
 
     model = FastLanguageModel.get_peft_model(
@@ -71,14 +71,14 @@ def train():
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
         num_train_epochs=3,
-        per_device_train_batch_size=2,
-        gradient_accumulation_steps=4,
-        warmup_steps=10,
+        per_device_train_batch_size=8,   # MI300X has VRAM to spare; fewer steps
+        gradient_accumulation_steps=1,
+        warmup_steps=2,                  # total run is only ~9 steps
         learning_rate=2e-4,
         fp16=not torch.cuda.is_bf16_supported(),
         bf16=torch.cuda.is_bf16_supported(),
-        logging_steps=5,
-        optim="adamw_8bit",
+        logging_steps=1,
+        optim="adamw_torch",             # 8-bit optimizer not needed without VRAM pressure
         weight_decay=0.01,
         lr_scheduler_type="linear",
         seed=42,
