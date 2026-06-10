@@ -28,9 +28,11 @@ ALPACA_PROMPT = """Below is an instruction that describes a task. Write a respon
 class ResponseGeneratorAgent:
     """Loads base Qwen (+ LoRA adapter if trained) and generates responses."""
 
-    def __init__(self, model_path: str = ADAPTER_DIR, use_adapter: bool = True):
+    def __init__(self, model_path: str = ADAPTER_DIR, use_adapter: bool = True,
+                 base_model_id: str = BASE_MODEL_ID):
         self.model_path = model_path
         self.use_adapter = use_adapter
+        self.base_model_id = base_model_id
         self.model = None
         self.tokenizer = None
         self._model_label = "unloaded"
@@ -46,7 +48,7 @@ class ResponseGeneratorAgent:
                           and (adapter_path / "adapter_config.json").exists())
 
         try:
-            self.tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_ID)
+            self.tokenizer = AutoTokenizer.from_pretrained(self.base_model_id)
 
             kwargs = {"device_map": "auto"}
             if LOAD_IN_4BIT:
@@ -57,17 +59,18 @@ class ResponseGeneratorAgent:
             else:
                 kwargs["torch_dtype"] = torch.bfloat16
 
-            self.model = AutoModelForCausalLM.from_pretrained(BASE_MODEL_ID, **kwargs)
+            self.model = AutoModelForCausalLM.from_pretrained(self.base_model_id, **kwargs)
 
+            size_tag = self.base_model_id.split("/")[-1]
             if adapter_exists:
                 from peft import PeftModel
                 # merge_and_unload folds the adapter into the base weights —
                 # identical outputs, but no per-token adapter overhead
                 # (unmerged LoRA measured ~25 tok/s vs ~53 tok/s base)
                 self.model = PeftModel.from_pretrained(self.model, self.model_path).merge_and_unload()
-                self._model_label = "fine-tuned (LoRA merged)"
+                self._model_label = f"fine-tuned {size_tag} (LoRA merged)"
             else:
-                self._model_label = "base" if not self.use_adapter else "base (no adapter found)"
+                self._model_label = f"base {size_tag}" if not self.use_adapter else f"base {size_tag} (no adapter found)"
 
             self.model.eval()
             print(f"[ResponseGenerator] Loaded: {self._model_label}")

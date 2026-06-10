@@ -17,7 +17,7 @@ from transformers import (
 )
 from peft import LoraConfig, get_peft_model
 
-from data.telecom_dataset import get_dataset
+from data.telecom_dataset import get_dataset, feedback_samples
 from agents.response_generator import ALPACA_PROMPT
 from config import BASE_MODEL_ID, ADAPTER_DIR, MAX_SEQ_LENGTH, LOAD_IN_4BIT
 from utils.steps import StepTracker
@@ -67,6 +67,10 @@ def build_dataset(tokenizer):
     into emoji fluff and self-commentary after its answer.
     """
     raw = get_dataset()
+    fb = feedback_samples()
+    if fb:
+        print(f"[flywheel] merging {len(fb)} approved feedback pairs into training set")
+        raw = raw + fb
 
     def tokenize(sample):
         prompt = ALPACA_PROMPT.format(sample["instruction"])

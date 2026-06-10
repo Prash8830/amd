@@ -60,6 +60,11 @@ with st.sidebar:
     if st.button("Clear conversation"):
         st.session_state.messages = []
         st.rerun()
+
+    router_on = st.session_state.orchestrator.fast_generator is not None
+    st.caption(("🔀 Model router: **active** (1.5B fast + 14B expert)" if router_on
+                else "Model router: single-model mode — train the fast adapter with "
+                     "`BASE_MODEL_ID=Qwen/Qwen2.5-1.5B python main.py --mode finetune`"))
     st.caption("Try: `What does billing code B-204 mean?` · "
                "`My HG-2410 LOS light is red` · `eSIM fails with ERR-2077` · "
                "PII masking: `My number is 555-867-5309 and my net is slow`")
@@ -129,13 +134,17 @@ col_chat, col_obs = st.columns([3, 2], gap="large")
 
 with col_chat:
     st.subheader("Customer support chat")
-    for msg in st.session_state.messages:
+    for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             if msg["role"] == "assistant" and "meta" in msg:
                 meta = msg["meta"]
+                trust_badge = ("🟢" if meta.get("trust", 1) >= 0.8 else
+                               "🟡" if meta.get("trust", 1) >= 0.6 else "🔴 escalated")
                 st.caption(
                     f"intent **{meta['intent']}** ({meta['confidence']:.0%}) · "
+                    f"route **{meta.get('route', 'expert')}** · "
+                    f"trust {meta.get('trust', 1.0):.2f} {trust_badge} · "
                     f"{meta['tokens']} tok @ **{meta['tps']:.1f} tok/s** · "
                     f"pipeline {meta['total_ms']:.0f} ms"
                 )
@@ -147,7 +156,10 @@ with col_chat:
                         f"input: `{guard_in}` · output: `{guard_out}`\n"
                         f"- intent classification: `{meta['intent_ms']:.2f} ms`\n"
                         f"- RAG retrieval ({meta['rag_method']}): `{meta['rag_ms']:.1f} ms`\n"
-                        f"- generation ({meta['model']}): `{meta['gen_ms']:.0f} ms`"
+                        f"- model router: `{meta.get('route', 'expert')}` — {meta.get('route_reason', '')}\n"
+                        f"- generation ({meta['model']}): `{meta['gen_ms']:.0f} ms`\n"
+                        f"- trust score: `{meta.get('trust', 1.0):.2f}` "
+                        f"{'→ **escalated to human review**' if meta.get('escalated') else '(served)'}"
                     )
                     for c in meta["chunks"]:
                         st.markdown(f"> {c['text']}")
@@ -155,6 +167,24 @@ with col_chat:
                     with st.expander("⚠️ base model (no fine-tuning) answered"):
                         st.markdown(msg["base_response"])
                         st.caption(msg["base_caption"])
+
+                # Feedback flywheel: approved answers feed the next fine-tune
+                if msg.get("fb"):
+                    st.caption(f"feedback recorded: {'👍 → next training set' if msg['fb'] == 'approved' else '👎 → review queue'}")
+                else:
+                    fb1, fb2, _ = st.columns([1, 1, 8])
+                    user_q = next((m["content"] for m in reversed(st.session_state.messages[:i])
+                                   if m["role"] == "user"), "")
+                    if fb1.button("👍", key=f"up_{i}"):
+                        from data.feedback_store import append_feedback
+                        append_feedback(user_q, msg["content"], "approved")
+                        msg["fb"] = "approved"
+                        st.rerun()
+                    if fb2.button("👎", key=f"down_{i}"):
+                        from data.feedback_store import append_feedback
+                        append_feedback(user_q, msg["content"], "rejected")
+                        msg["fb"] = "rejected"
+                        st.rerun()
 
 with col_obs:
     st.subheader("Inference analytics")
@@ -176,6 +206,28 @@ with col_obs:
 
         st.caption("Intent distribution")
         st.bar_chart(df["intent"].value_counts(), height=140)
+
+    # Human-in-the-loop escalation queue
+    escalated = [m for m in st.session_state.messages
+                 if m.get("role") == "assistant" and m.get("meta", {}).get("escalated")]
+    st.divider()
+    st.subheader(f"🔴 Escalation queue ({len(escalated)})")
+    if not escalated:
+        st.caption("No answers below the trust threshold.")
+    for e in escalated:
+        st.warning(f"trust {e['meta']['trust']:.2f} — {e['content'][:160]}...")
+
+    # Data flywheel status
+    from data.feedback_store import load_feedback
+    fb_all = load_feedback()
+    approved_n = sum(1 for f in fb_all if f.get("label") == "approved")
+    st.divider()
+    st.subheader("🔄 Data flywheel")
+    st.caption(
+        f"**{approved_n}** approved pairs queued for the next fine-tune "
+        f"({len(fb_all) - approved_n} in review). Next `finetune.py` run merges "
+        f"them automatically — a retrain costs ~1 min on MI300X."
+    )
 
 
 # ── Chat input (top level — triggers full rerun) ─────────────────────────────
@@ -223,6 +275,10 @@ if prompt := st.chat_input("Ask a telecom support question..."):
             "guard_ms": r.guardrail_ms,
             "guard_in": r.guardrail_input_flags,
             "guard_out": r.guardrail_output_flags,
+            "route": r.route,
+            "route_reason": r.route_reason,
+            "trust": r.trust_score,
+            "escalated": r.escalated,
         },
     })
     st.session_state.query_log.append({

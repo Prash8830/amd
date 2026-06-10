@@ -259,6 +259,34 @@ def get_dataset():
     return samples
 
 
+def feedback_samples():
+    """Approved user-feedback pairs (data flywheel) in training format —
+    same instruction shape, intent labeled by the real classifier."""
+    _repo_root_on_path()
+    from agents.intent_classifier import IntentClassifierAgent
+    from data.feedback_store import load_approved
+
+    approved = load_approved()
+    if not approved:
+        return []
+
+    classifier = IntentClassifierAgent()
+    samples = []
+    for row in approved:
+        intent = classifier.classify(row["question"]).intent
+        context = "\n".join(f"- {c}" for c in _kb_chunks_for_intent(intent))
+        samples.append({
+            "instruction": (
+                f"You are a helpful telecom customer support agent. Intent: {intent}.\n\n"
+                f"Relevant knowledge:\n{context}\n\n"
+                f"Customer query: {row['question']}"
+            ),
+            "output": row["answer"],
+            "intent": intent,
+        })
+    return samples
+
+
 def get_alpaca_format():
     """Return dataset in Alpaca format for training."""
     alpaca_prompt = """Below is an instruction that describes a task. Write a response that appropriately completes the request.
