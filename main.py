@@ -57,7 +57,16 @@ def run_finetune():
 
 def run_streamlit():
     import subprocess
-    subprocess.run([sys.executable, "-m", "streamlit", "run", "app.py", "--server.port", "8501"])
+    # CORS/XSRF off so the app works behind jupyter-server-proxy
+    # (reach it at <jupyter-base-url>/proxy/8501/)
+    subprocess.run([
+        sys.executable, "-m", "streamlit", "run", "app.py",
+        "--server.port", "8501",
+        "--server.address", "0.0.0.0",
+        "--server.headless", "true",
+        "--server.enableCORS", "false",
+        "--server.enableXsrfProtection", "false",
+    ])
 
 
 if __name__ == "__main__":
