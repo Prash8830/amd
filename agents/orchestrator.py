@@ -15,6 +15,7 @@ from agents.intent_classifier import IntentClassifierAgent, IntentResult
 from agents.model_router import ModelRouter
 from agents.rag_agent import RAGAgent, RetrievalResult
 from agents.response_generator import ResponseGeneratorAgent, GenerationResult
+from agents.semantic_cache import SemanticCache
 from config import ADAPTER_DIR, FAST_ADAPTER_DIR, FAST_MODEL_ID
 
 TRUST_THRESHOLD = 0.6
@@ -67,6 +68,9 @@ class TelecomOrchestrator:
         self.clarity = ClarityAgent()
         self.classifier = IntentClassifierAgent()
         self.rag = RAGAgent(use_chromadb=True)
+        # Tier-zero serving: human-approved answers, reusing the RAG embedder
+        self.cache = SemanticCache(embedder=getattr(self.rag, "_embedder", None))
+        print(f"[Orchestrator] Semantic cache: {self.cache.size()} approved pairs.")
         self.router = ModelRouter()
         self.generator = ResponseGeneratorAgent(model_path=model_path)
 
@@ -96,6 +100,15 @@ class TelecomOrchestrator:
             return _early_result(safe_query, cl.clarifying_question,
                                  f"clarity agent ({cl.reason})", t0,
                                  gin.flags, clarification=True)
+
+        # Tier zero: human-approved answer for a near-identical question →
+        # serve directly. Zero GPU; trust 1.0 because a human validated it.
+        cres = self.cache.lookup(safe_query)
+        if cres.hit:
+            return _early_result(
+                safe_query, cres.answer, "semantic cache (human-approved)", t0,
+                gin.flags, route="cache",
+                route_reason=f"ground-truth hit, similarity {cres.similarity:.2f}")
         t_pre = time.perf_counter()
 
         routing_text = f"{history} {safe_query}" if history else safe_query
@@ -103,6 +116,14 @@ class TelecomOrchestrator:
         t1 = time.perf_counter()
 
         retrieval_result = self.rag.retrieve(routing_text, intent_result.intent, top_k=3)
+        # Near-miss cache: similar approved pair becomes extra grounding evidence
+        if cres.assist:
+            retrieval_result.chunks.append({
+                "id": "cache_assist",
+                "text": (f"Approved answer to a similar past question "
+                         f"('{cres.question}'): {cres.answer}"),
+                "score": cres.similarity,
+            })
         t2 = time.perf_counter()
 
         route, route_reason = "expert", "single-model deployment"

@@ -179,11 +179,13 @@ with col_chat:
                         from data.feedback_store import append_feedback
                         append_feedback(user_q, msg["content"], "approved")
                         msg["fb"] = "approved"
+                        st.session_state.orchestrator.cache.refresh()
                         st.rerun()
                     if fb2.button("👎", key=f"down_{i}"):
                         from data.feedback_store import append_feedback
                         append_feedback(user_q, msg["content"], "rejected")
                         msg["fb"] = "rejected"
+                        st.session_state.orchestrator.cache.refresh()
                         st.rerun()
 
 with col_obs:
@@ -223,10 +225,15 @@ with col_obs:
     approved_n = sum(1 for f in fb_all if f.get("label") == "approved")
     st.divider()
     st.subheader("🔄 Data flywheel")
+    cache_n = st.session_state.orchestrator.cache.size()
     st.caption(
         f"**{approved_n}** approved pairs queued for the next fine-tune "
         f"({len(fb_all) - approved_n} in review). Next `finetune.py` run merges "
         f"them automatically — a retrain costs ~1 min on MI300X."
+    )
+    st.caption(
+        f"⚡ Semantic cache serving **{cache_n}** human-approved answers — "
+        f"repeat questions cost zero GPU."
     )
 
 
