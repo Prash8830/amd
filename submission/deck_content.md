@@ -66,8 +66,8 @@ countable."*
 **[Insert the TruthLine flow diagram here — full-slide visual]**
 
 **AI approach:** LoRA fine-tuning (PEFT) + RAG grounding + multi-agent
-orchestration + MCP tools — *"behavior in the weights, facts in the database,
-tools on the protocol."*
+orchestration + MCP tools — *"domain truth in the weights, facts in the
+knowledge fabric, tools on the protocol, humans in the loop."*
 
 **The pipeline (7 stages):**
 guardrails (PII/injection) → clarity gate (ask, don't guess) → semantic cache
@@ -163,3 +163,18 @@ scale dataset with real anonymized transcripts (eval-gated promotion)
 *Talk track: end on the flywheel sentence: "TruthLine doesn't just answer
 correctly today — every interaction makes tomorrow's model better, for one
 minute of AMD GPU time a night."*
+
+---
+
+## Vocabulary sheet (use consistently in deck, video, and Q&A)
+
+| Instead of | Say |
+|---|---|
+| knowledge base | **knowledge fabric** |
+| chatbot | **support intelligence system** |
+| fine-tuned model | **domain-expert model** |
+| training data | **curated domain corpus** |
+| user feedback | **human-in-the-loop signal** |
+| cache | **tier-zero serving** (semantic cache) |
+| picking model size | **right-sized compute** |
+| always | **data flywheel**, **trust gate**, **guardrail layer**, **agentic pipeline** |
