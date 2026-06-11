@@ -120,8 +120,14 @@ class TelecomOrchestrator:
                 route_reason=f"ground-truth hit, similarity {cres.similarity:.2f}")
         t_pre = time.perf_counter()
 
-        routing_text = f"{history} {safe_query}" if history else safe_query
-        intent_result = self.classifier.classify(routing_text)
+        # Current query first — history only resolves elliptical follow-ups
+        # ("the light is red"), never outvotes an explicit topic switch
+        # ("my internet is slow" after three billing questions).
+        intent_result = self.classifier.classify(safe_query)
+        routing_text = safe_query
+        if history and not intent_result.matched_keywords:
+            routing_text = f"{history} {safe_query}"
+            intent_result = self.classifier.classify(routing_text)
         t1 = time.perf_counter()
 
         retrieval_result = self.rag.retrieve(routing_text, intent_result.intent, top_k=3)
