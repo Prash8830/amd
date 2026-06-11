@@ -1,104 +1,166 @@
-# Telecom Support Chatbot — AMD Hackathon
+# 📡 TruthLine — Telco-specific Customer LLM
 
-Fine-tuned **Qwen QLoRA** telecom customer support chatbot with multi-agent RAG pipeline and AMD GPU observability dashboard.
+*AMD × TCS Hackathon · Track 3 (Fine-Tuning) · Use case FINETUNING_002*
 
-**Model selection** is centralized in `config.py` — currently `Qwen/Qwen2.5-1.5B` for fast pipeline validation. Swap to `Qwen/Qwen3-14B` for the final run by editing `config.py` or setting the env var:
+Fine-tuned **Qwen3-14B** on an **AMD Instinct MI300X** so proprietary telecom
+knowledge — internal billing codes, router hardware, error codes — lives in
+the model's weights. Measured on held-out questions: **22% → 94% accuracy**,
+with **74% fewer tokens** per answer. Wrapped in a 7-stage agentic pipeline
+with guardrails, semantic caching, model routing, MCP enterprise tools, and a
+data flywheel that turns user approvals into new model weights in ~60 seconds
+of GPU time.
 
-```bash
-BASE_MODEL_ID=Qwen/Qwen3-14B python main.py --mode finetune
-```
+> Domain truth in the weights. Facts in the knowledge fabric.
+> Tools on the protocol. Humans in the loop.
+
+## Headline results (18 held-out, paraphrased questions)
+
+| Category | Base Qwen3-14B | TruthLine fine-tuned |
+|---|---|---|
+| Internal billing codes | 0% | **80%** |
+| Internal error codes | 0% | **100%** |
+| Internal hardware | 0% | **100%** |
+| Public telecom | 80% | **100%** |
+| **TOTAL** | **22%** | **94%** |
+
+Tokens/answer 302 → **78** (−74%) · latency **−51%** · LoRA retrain **~60 s**
+on one MI300X (98% GPU util, ~740 W, live via rocm-smi).
+The proprietary facts are synthetic — invented for this project — so the base
+model *cannot* know them: the improvement is provable, not anecdotal.
 
 ## Architecture
 
 ```
-User Query
-    │
-    ▼
-Intent Classifier Agent  (keyword + regex, 5 intents)
-    │
-    ▼
-RAG Retrieval Agent      (ChromaDB + sentence-transformers)
-    │
-    ▼
-Response Generator Agent (Qwen3-14B QLoRA, 4-bit, AMD ROCm)
-    │
-    ▼
-Streamlit Dashboard      (GPU util, VRAM, tok/s, latency)
+Customer query
+   │
+   ▼
+Input guardrails ──── PII masking · prompt-injection block
+   │
+   ▼
+Clarity gate ───────── vague? ask, don't guess (no GPU)
+   │
+   ▼
+Semantic cache ─────── human-approved answer? serve in ~10 ms, zero GPU
+   │
+   ▼
+Intent classifier ──── billing · network · device · plan · account
+   │
+   ▼
+Evidence agent ─────── hybrid RRF retrieval (BM25 + vector, query fusion)
+   │                    + live outage feed via MCP (network queries)
+   ▼
+Model router ───────── right-sized compute:
+   ├─ fast lane:   Qwen2.5-1.5B (fine-tuned)      — simple FAQ
+   └─ expert lane: Qwen3-14B   (fine-tuned, merged) — codes/troubleshooting
+   │                 └ optional: served via vLLM as an API endpoint
+   ▼
+Output guardrails ──── PII-leak redaction · unverified-amount flags
+   │
+   ▼
+Trust gate ─────────── score < 0.6 → routed via MCP to the on-call
+   │                    domain expert (human review), not the customer
+   ▼
+Answer ── 👍/👎 ──► Ground-truth DB ──► semantic cache (instant)
+                                    └─► next ~60 s LoRA retrain (data flywheel)
 ```
 
-## Quick Start (AMD ROCm Jupyter Notebook)
+Everything runs locally on the MI300X — **zero external API calls**.
 
-```bash
-# 1. Clone
-git clone https://github.com/Prash8830/amd.git
-cd amd
-
-# 2. Install dependencies
-pip install -r requirements.txt
-
-# 3a. Fine-tune (fast with small model; minutes on MI300)
-python main.py --mode finetune
-
-# 3b. Test pipeline (notebook-friendly, no stdin needed)
-python test_pipeline.py
-
-# Optional — vLLM serving (model hosted as an API endpoint):
-#   pip install vllm                      # ROCm wheels; if install fails, skip — in-process serving is the default
-#   python export_merged.py               # writes ./models/truthline-merged-* (~28 GB)
-#   vllm serve ./models/truthline-merged-qwen3-14b --port 8200 --served-model-name truthline-14b
-#   VLLM_URL=http://localhost:8200/v1 python main.py --mode ui
-
-# Optional — MCP enterprise server (run in a separate terminal BEFORE the app):
-#   pip install mcp
-#   python mcp_server/telecom_mcp.py      # expert routing + live outage feed on :8765
-
-# 3c. Measure accuracy: base vs fine-tuned on held-out questions
-#     (internal billing codes / hardware / error codes — facts a base
-#      model cannot know — plus public telecom questions)
-python evaluate.py        # prints accuracy table, writes eval_results.json
-
-# 3b. Interactive CLI
-python main.py --mode cli
-
-# 3c. FastAPI backend
-python main.py --mode api
-
-# 3d. Streamlit dashboard
-python main.py --mode ui
-# or: streamlit run app.py --server.port 8501
-```
-
-## From Jupyter Notebook
+## Quick start (AMD ROCm Jupyter)
 
 ```python
 !git clone https://github.com/Prash8830/amd.git
 %cd amd
 !pip install -r requirements.txt
 
-# Fine-tune first
+# 1. Fine-tune the expert lane (14B) — ~3-4 min incl. load, ~60 s training
 !python main.py --mode finetune
 
-# Then run the UI
+# 2. Fine-tune the fast lane (1.5B) — activates the model router
+!BASE_MODEL_ID=Qwen/Qwen2.5-1.5B python main.py --mode finetune
+
+# 3. Measured accuracy: base vs fine-tuned (~6 min, writes eval_results.json)
+!python evaluate.py
+
+# 4. (separate terminal) MCP enterprise server — start BEFORE the app
+#    python mcp_server/telecom_mcp.py        # expert routing + outage feed :8765
+
+# 5. TruthLine console
 !python main.py --mode ui
+# open <jupyter-base-url>/proxy/8501/
 ```
 
-## ROCm Notes
+Other entry points: `python compare.py` (side-by-side base vs fine-tuned),
+`python test_pipeline.py` (no-stdin smoke test), `--mode api` (FastAPI),
+`--mode cli`.
 
-- Set `HSA_OVERRIDE_GFX_VERSION=11.0.0` for MI300/RX7900 series (already in code)
-- Set `PYTORCH_HIP_ALLOC_CONF=max_split_size_mb:512` to avoid OOM
-- 4-bit QLoRA requires ~8GB VRAM minimum; 24GB recommended for Qwen3-14B
+### Optional: vLLM serving (model hosted as an API endpoint)
 
-## Files
+```bash
+pip install vllm                 # ROCm wheels; if install fails, skip — in-process serving is the default
+python export_merged.py          # one-time merged checkpoint (~28 GB)
+vllm serve ./models/truthline-merged-qwen3-14b --port 8200 --served-model-name truthline-14b
+VLLM_URL=http://localhost:8200/v1 python main.py --mode ui
+```
 
-| File | Purpose |
+## The TruthLine console (4 tabs)
+
+- **💬 Support console** — chat with per-answer trust badges, full pipeline
+  traces (guardrails, routing, MCP tools, trust), base-model comparison
+  toggle, 👍/👎 feedback
+- **📊 Observability** — live rocm-smi telemetry (GPU util, VRAM, power,
+  temp) + serving-tier distribution and zero-GPU answer count
+- **🛡️ Governance** — human review queue with MCP expert assignment,
+  trust-score timeline, guardrail activity log
+- **🎯 Model quality & flywheel** — eval results rendered as base-vs-fine-tuned
+  charts; flywheel counters and the approved-pairs browser
+
+## Fine-tuning approach (summary)
+
+LoRA (PEFT) on Qwen3-14B: r=32, bf16, completion-only loss masking, native
+EOS, 12 epochs over a 168-sample curated domain corpus (68 unique answers,
+24 invented proprietary facts; intents labeled by the production classifier
+so train and serve prompts match exactly). Adapter merged at serving time for
+zero per-token overhead. 4-bit/QLoRA deliberately **not** used — the MI300X's
+192 GB makes quantization pure overhead (kept available via `LOAD_IN_4BIT=1`
+for smaller GPUs). Unsloth deliberately **not** used — CUDA-first kernels
+hang on ROCm; plain `peft + transformers` is fully supported and fast enough
+(~60 s per fine-tune).
+
+Full detail, design rationale, failure log, and jury Q&A:
+**[docs/TECHNICAL_GUIDE.md](docs/TECHNICAL_GUIDE.md)**
+
+## Repo map
+
+| Path | Purpose |
 |------|---------|
-| `finetune.py` | QLoRA fine-tuning script |
-| `main.py` | Entry point (cli/api/finetune/ui modes) |
-| `app.py` | Streamlit observability dashboard |
+| `finetune.py` | LoRA training (masking, native EOS, flywheel auto-merge) |
+| `evaluate.py` | Held-out eval → accuracy table + `eval_results.json` |
+| `compare.py` | Base vs fine-tuned side-by-side (adapter toggle) |
+| `export_merged.py` | Merged checkpoint export for vLLM serving |
+| `main.py` | Entry point: `finetune` / `ui` / `api` / `cli` |
+| `app.py` | TruthLine 4-tab console (Streamlit, proxy-ready) |
 | `api.py` | FastAPI backend |
-| `agents/orchestrator.py` | Multi-agent pipeline coordinator |
-| `agents/intent_classifier.py` | Intent classification agent |
-| `agents/rag_agent.py` | ChromaDB RAG retrieval agent |
-| `agents/response_generator.py` | Qwen3-14B generation agent |
-| `data/telecom_dataset.py` | Synthetic telecom QA dataset |
-| `utils/amd_metrics.py` | AMD ROCm GPU metrics via rocm-smi |
+| `agents/orchestrator.py` | Pipeline coordination, stage timings, trust gate |
+| `agents/guardrails.py` | PII masking, injection block, unverified-amount flags |
+| `agents/clarity.py` | Ambiguity gate (ask, don't guess) |
+| `agents/semantic_cache.py` | Tier-zero serving from approved answers |
+| `agents/intent_classifier.py` | Keyword intent scoring |
+| `agents/rag_agent.py` | Hybrid RRF retrieval (BM25 + vector, query fusion) |
+| `agents/model_router.py` | Fast/expert lane routing |
+| `agents/response_generator.py` | Fine-tuned model serving (HF in-process or vLLM) |
+| `agents/mcp_client.py` | Sync MCP client (expert routing, outage feed) |
+| `mcp_server/telecom_mcp.py` | Enterprise MCP server (SSE, port 8765) |
+| `data/telecom_dataset.py` | Curated domain corpus builder |
+| `data/internal_kb.py` | Synthetic proprietary knowledge layer |
+| `data/feedback_store.py` | Ground-truth store (data flywheel) |
+| `utils/amd_metrics.py` | rocm-smi JSON telemetry |
+| `docs/TECHNICAL_GUIDE.md` | Full technical documentation + jury Q&A |
+| `submission/` | Deck content, Gamma input, demo video script |
+
+## Disclosure
+
+All code written during the hackathon (see git history). Open-source stack:
+transformers, peft, ChromaDB, sentence-transformers, Streamlit, FastAPI,
+MCP SDK. Architecture concepts (clarity gate, trust alignment, ground-truth
+flywheel) adapted from the author's own prior patent-pending TruthGate design.

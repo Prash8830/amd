@@ -264,11 +264,26 @@ them to near-zero cost.
 across 5 intents + general. Deliberately not an LLM: runs in microseconds,
 deterministic, free. Feeds routing and RAG filtering.
 
-**Evidence agent / RAG** (`agents/rag_agent.py`) — ChromaDB +
-sentence-transformers (all-MiniLM-L6-v2); 12 public policy chunks; top-3
-retrieved per query; keyword fallback if Chroma unavailable. Grounds answers
-in *current* policy facts. (Production path: MCP connectors and grounding
-APIs — architecture slide, disclosed as future work.)
+**Evidence agent / hybrid RAG** (`agents/rag_agent.py`) — **hybrid retrieval
+with query fusion**: each query expands into intent-augmented variants; every
+variant is ranked by (a) a dependency-free Okapi **BM25** index — exact
+lexical matching, which embeddings are weak at for alphanumeric tokens like
+"B-204" or "HG-2410" — and (b) the **ChromaDB vector index**
+(sentence-transformers all-MiniLM-L6-v2); all rankings are fused with
+**Reciprocal Rank Fusion (RRF)**. Degrades to BM25-only if the vector store
+is unavailable; the active method shows in every pipeline trace. For network
+queries, the live outage status fetched **via MCP** is appended as an extra
+grounding chunk.
+
+**MCP enterprise layer** (`mcp_server/telecom_mcp.py` + `agents/mcp_client.py`)
+— a real Model Context Protocol server (official Python SDK, SSE transport,
+port 8765) run as a separate visible process. Tools: `find_expert(domain)`
+(on-call expert directory, lowest-load routing — used when the trust gate
+escalates), `get_outage_status(area)` (live network feed → grounding
+evidence), `get_current_datetime()`. The orchestrator probes availability
+once at startup; a missing server degrades gracefully with zero hot-path
+latency. *This is "LLM + tools = agent" made concrete: agents calling
+enterprise systems over the protocol, not just a model answering.*
 
 **Model router** (`agents/model_router.py`) — right-sizes the model per query:
 proprietary codes / troubleshooting language / low confidence → 14B expert;
@@ -286,8 +301,9 @@ amounts not present in grounding context or curated facts are flagged
 `unverified_amount` (this automates the exact "$15 overage" failure class we
 caught manually). Trust score aggregates cheap existing signals (guardrail
 flags, intent confidence, retrieval quality); **score < 0.6 → the answer goes
-to the human review queue, not the customer.** Human-in-the-loop without a
-human in the hot path.
+to the human review queue, not the customer — and MCP `find_expert` assigns
+the right on-call domain expert** (hardware issue → CPE specialist, billing →
+billing ops). Human-in-the-loop without a human in the hot path.
 
 **Conversation memory** — last 2 exchanges feed intent routing, retrieval, and
 the prompt; enables "My router is an HG-2410" → "the light is red".
@@ -314,8 +330,14 @@ improves the *weights*, not just retrieval.
   power) and rendered live in the Observability tab. During training we
   observed 98% GPU utilization at ~740 W.
 - **Numbers worth quoting:** full 14B LoRA fine-tune in ~1 minute; 14B bf16
-  inference ~26–30 tok/s single-stream (unoptimized HF `generate`; vLLM on
-  ROCm is the named production serving path); 14B model = ~15% of the card.
+  inference ~26–30 tok/s single-stream via HF `generate`; 14B model = ~15%
+  of the card.
+- **vLLM serving path (implemented):** `export_merged.py` writes a merged
+  full checkpoint; `vllm serve <dir> --port 8200` hosts it as an
+  OpenAI-compatible API endpoint; setting `VLLM_URL` switches the expert lane
+  to "model hosted as API endpoint → agent flow" with graceful fallback to
+  in-process serving. (Install of vLLM ROCm wheels is environment-dependent —
+  the system is fully functional either way.)
 - **Lessons:** drop CUDA-first acceleration libs (Unsloth) on ROCm; never set
   `HSA_OVERRIDE_GFX_VERSION` on Instinct cards; everything else "just worked."
 
@@ -373,11 +395,17 @@ flywheel) adapted from the author's own prior patent-pending TruthGate design,
 re-implemented from scratch for fine-tuning.
 
 **Q: Production roadmap?**
-A: vLLM on ROCm for batched serving; MCP connectors to real billing/CRM
-systems; grounding APIs (coverage, outage status); LangGraph migration for
+A: Batched vLLM serving (single-stream path already implemented behind
+`VLLM_URL`); extending the MCP server — already live for expert routing and
+outage status — to real billing/CRM connectors; LangGraph migration for
 durable orchestration; GRPO/DPO on thumbs-down pairs (today they only gate;
 preference optimization would learn from them); scheduled nightly flywheel
 retrains with eval-gated promotion.
+
+**Q: Is your RAG just vector search?**
+A: No — hybrid with query fusion: BM25 (exact lexical match, which embeddings
+miss on tokens like "B-204") plus vector similarity, over intent-expanded
+query variants, fused with Reciprocal Rank Fusion. Visible in every trace.
 
 ---
 
@@ -410,9 +438,12 @@ retrains with eval-gated promotion.
 | `agents/clarity.py` | Ambiguity gate |
 | `agents/semantic_cache.py` | Tier-zero serving from approved answers |
 | `agents/model_router.py` | Fast/expert lane routing |
-| `agents/rag_agent.py` | ChromaDB retrieval + public KB |
+| `agents/rag_agent.py` | Hybrid RRF retrieval (BM25 + vector, query fusion) + public KB |
 | `agents/intent_classifier.py` | Keyword intent scoring |
-| `agents/response_generator.py` | Fine-tuned model serving (merged adapter) |
+| `agents/response_generator.py` | Fine-tuned model serving (merged adapter, in-process or vLLM) |
+| `agents/mcp_client.py` | Sync MCP client (3s timeout, graceful degradation) |
+| `mcp_server/telecom_mcp.py` | Enterprise MCP server: find_expert, get_outage_status |
+| `export_merged.py` | Merged checkpoint export for vLLM serving |
 | `data/telecom_dataset.py` | Training set builder (variants, classifier-labeled) |
 | `data/internal_kb.py` | The synthetic proprietary layer |
 | `data/feedback_store.py` | Ground-truth JSONL (flywheel) |
