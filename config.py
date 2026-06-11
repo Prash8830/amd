@@ -26,4 +26,13 @@ FAST_ADAPTER_DIR = os.environ.get(
 # small model. Set true when running Qwen3-14B if VRAM is ever a concern.
 LOAD_IN_4BIT = os.environ.get("LOAD_IN_4BIT", "0") == "1"
 
+# vLLM serving (expert lane). Workflow:
+#   1. python export_merged.py                 -> writes MERGED_MODEL_DIR
+#   2. vllm serve <MERGED_MODEL_DIR> --port 8200 --served-model-name truthline-14b
+#   3. VLLM_URL=http://localhost:8200/v1 python main.py --mode ui
+# Empty VLLM_URL (default) = in-process HF serving, unchanged.
+VLLM_URL = os.environ.get("VLLM_URL", "")
+VLLM_MODEL_NAME = os.environ.get("VLLM_MODEL_NAME", "truthline-14b")
+MERGED_MODEL_DIR = os.environ.get("MERGED_MODEL_DIR", f"./models/truthline-merged-{_model_slug}")
+
 MAX_SEQ_LENGTH = 1024  # our telecom samples are short; smaller = faster

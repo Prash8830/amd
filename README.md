@@ -42,6 +42,16 @@ python main.py --mode finetune
 # 3b. Test pipeline (notebook-friendly, no stdin needed)
 python test_pipeline.py
 
+# Optional — vLLM serving (model hosted as an API endpoint):
+#   pip install vllm                      # ROCm wheels; if install fails, skip — in-process serving is the default
+#   python export_merged.py               # writes ./models/truthline-merged-* (~28 GB)
+#   vllm serve ./models/truthline-merged-qwen3-14b --port 8200 --served-model-name truthline-14b
+#   VLLM_URL=http://localhost:8200/v1 python main.py --mode ui
+
+# Optional — MCP enterprise server (run in a separate terminal BEFORE the app):
+#   pip install mcp
+#   python mcp_server/telecom_mcp.py      # expert routing + live outage feed on :8765
+
 # 3c. Measure accuracy: base vs fine-tuned on held-out questions
 #     (internal billing codes / hardware / error codes — facts a base
 #      model cannot know — plus public telecom questions)

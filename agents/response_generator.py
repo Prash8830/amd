@@ -29,14 +29,21 @@ class ResponseGeneratorAgent:
     """Loads base Qwen (+ LoRA adapter if trained) and generates responses."""
 
     def __init__(self, model_path: str = ADAPTER_DIR, use_adapter: bool = True,
-                 base_model_id: str = BASE_MODEL_ID):
+                 base_model_id: str = BASE_MODEL_ID, vllm_url: str = ""):
         self.model_path = model_path
         self.use_adapter = use_adapter
         self.base_model_id = base_model_id
+        self.vllm_url = vllm_url.rstrip("/") if vllm_url else ""
         self.model = None
         self.tokenizer = None
         self._model_label = "unloaded"
-        self._load_model()
+        if self.vllm_url:
+            # Model hosted as an API endpoint (vLLM, OpenAI-compatible) —
+            # no local weights needed in this process
+            self._model_label = "fine-tuned (vLLM serving)"
+            print(f"[ResponseGenerator] Using vLLM endpoint: {self.vllm_url}")
+        else:
+            self._load_model()
 
     def _load_model(self):
         import torch
@@ -80,21 +87,14 @@ class ResponseGeneratorAgent:
 
     def generate(self, query: str, context_chunks: list[dict], intent: str,
                  history: str | None = None) -> GenerationResult:
+        if self.vllm_url:
+            return self._generate_vllm(query, context_chunks, intent, history)
         if self.model is None:
             return self._mock_generate(query)
 
-        context = "\n".join(f"- {c['text']}" for c in context_chunks)
         # History rides inside the customer-query line so the prompt shape
         # stays identical to training (model was tuned single-turn)
-        customer_line = (
-            f"(Earlier in this conversation: {history}) {query}" if history else query
-        )
-        instruction = (
-            f"You are a helpful telecom customer support agent. Intent: {intent}.\n\n"
-            f"Relevant knowledge:\n{context}\n\n"
-            f"Customer query: {customer_line}"
-        )
-        prompt = ALPACA_PROMPT.format(instruction)
+        prompt = self._build_prompt(query, context_chunks, intent, history)
 
         import torch
         inputs = self.tokenizer([prompt], return_tensors="pt").to(self.model.device)
@@ -126,6 +126,60 @@ class ResponseGeneratorAgent:
             tokens_generated=len(new_tokens),
             inference_time_ms=round(elapsed_ms, 1),
             tokens_per_second=round(tps, 1),
+            model_used=self._model_label,
+        )
+
+    def _build_prompt(self, query: str, context_chunks: list[dict], intent: str,
+                      history: str | None) -> str:
+        context = "\n".join(f"- {c['text']}" for c in context_chunks)
+        customer_line = (
+            f"(Earlier in this conversation: {history}) {query}" if history else query
+        )
+        instruction = (
+            f"You are a helpful telecom customer support agent. Intent: {intent}.\n\n"
+            f"Relevant knowledge:\n{context}\n\n"
+            f"Customer query: {customer_line}"
+        )
+        return ALPACA_PROMPT.format(instruction)
+
+    def _generate_vllm(self, query: str, context_chunks: list[dict], intent: str,
+                       history: str | None) -> GenerationResult:
+        """Model hosted as an API endpoint — vLLM OpenAI-compatible /completions."""
+        import httpx
+        from config import VLLM_MODEL_NAME
+
+        prompt = self._build_prompt(query, context_chunks, intent, history)
+        t0 = time.perf_counter()
+        try:
+            resp = httpx.post(
+                f"{self.vllm_url}/completions",
+                json={
+                    "model": VLLM_MODEL_NAME,
+                    "prompt": prompt,
+                    "max_tokens": 320,
+                    "temperature": 0.7,
+                    "top_p": 0.9,
+                    "repetition_penalty": 1.15,
+                    "stop": ["###", "\n---"],
+                },
+                timeout=120.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            print(f"[ResponseGenerator] vLLM request failed: {e}")
+            return self._mock_generate(query)
+        t1 = time.perf_counter()
+
+        text = data["choices"][0]["text"].strip()
+        text = text.split("###")[0].split("\n---")[0].strip()
+        n_tokens = data.get("usage", {}).get("completion_tokens", 0)
+        elapsed = t1 - t0
+        return GenerationResult(
+            response=text,
+            tokens_generated=n_tokens,
+            inference_time_ms=round(elapsed * 1000, 1),
+            tokens_per_second=round(n_tokens / elapsed, 1) if elapsed > 0 else 0,
             model_used=self._model_label,
         )
 

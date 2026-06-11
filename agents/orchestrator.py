@@ -17,7 +17,7 @@ from agents.rag_agent import RAGAgent, RetrievalResult
 from agents.response_generator import ResponseGeneratorAgent, GenerationResult
 from agents.semantic_cache import SemanticCache
 from agents.mcp_client import call_mcp_tool, mcp_available
-from config import ADAPTER_DIR, FAST_ADAPTER_DIR, FAST_MODEL_ID
+from config import ADAPTER_DIR, FAST_ADAPTER_DIR, FAST_MODEL_ID, VLLM_URL
 
 TRUST_THRESHOLD = 0.6
 
@@ -75,7 +75,8 @@ class TelecomOrchestrator:
         self.cache = SemanticCache(embedder=getattr(self.rag, "_embedder", None))
         print(f"[Orchestrator] Semantic cache: {self.cache.size()} approved pairs.")
         self.router = ModelRouter()
-        self.generator = ResponseGeneratorAgent(model_path=model_path)
+        # Expert lane: vLLM endpoint when configured, in-process HF otherwise
+        self.generator = ResponseGeneratorAgent(model_path=model_path, vllm_url=VLLM_URL)
 
         # Enterprise MCP server (expert routing, live outage feed) — optional
         self.mcp_on = mcp_available()
