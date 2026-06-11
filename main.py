@@ -1,5 +1,5 @@
 """
-Telecom Support Chatbot — AMD Hackathon
+TruthLine — Telco-specific Customer LLM (AMD Hackathon)
 Entry point: python main.py [--mode api|cli|finetune]
 """
 
@@ -15,7 +15,7 @@ def run_cli():
     from agents.orchestrator import TelecomOrchestrator
 
     print("=" * 60)
-    print("  Telecom Support Chatbot — AMD ROCm Edition")
+    print("  TruthLine — Telco-specific Customer LLM · AMD ROCm")
     print("  Powered by Qwen3-14B QLoRA + Multi-Agent Pipeline")
     print("=" * 60)
 
@@ -70,7 +70,7 @@ def run_streamlit():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Telecom Support Chatbot")
+    parser = argparse.ArgumentParser(description="TruthLine — telco-specific customer LLM")
     parser.add_argument("--mode", choices=["cli", "api", "finetune", "ui"], default="cli",
                         help="cli=interactive, api=FastAPI server, finetune=train model, ui=Streamlit")
     args = parser.parse_args()

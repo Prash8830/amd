@@ -35,7 +35,7 @@ class ChatResponse(BaseModel):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Telecom Support Chatbot", version="1.0.0")
+    app = FastAPI(title="TruthLine API", version="1.0.0")
 
     @app.on_event("startup")
     async def startup():
