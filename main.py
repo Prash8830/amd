@@ -16,7 +16,7 @@ def run_cli():
 
     print("=" * 60)
     print("  TruthLine — Telco-specific Customer LLM · AMD ROCm")
-    print("  Powered by Qwen3-14B QLoRA + Multi-Agent Pipeline")
+    print("  Fine-tuned Qwen3-14B (LoRA) · 7-stage agentic pipeline")
     print("=" * 60)
 
     orchestrator = TelecomOrchestrator()
