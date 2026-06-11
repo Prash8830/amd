@@ -1,61 +1,51 @@
-# Gamma.app input — TruthLine deck (card-by-card format)
+# Gamma.app input v2 — TruthLine deck (card-by-card)
 
-## Part 1 — paste into Gamma's prompt/instructions field
+## Gamma UI settings (prompts cannot control these — set manually)
+- Theme: pick a DARK theme in the theme picker; set accent color to #ED1C24
+- AI images: OFF (or minimal/abstract) — numbers and our diagram are the visuals
+- Text density: medium · Format: presentation 16:9 · export PDF for submission
+- Card 3: insert the TruthLine pipeline diagram image (from the chat widget
+  "truthline_final_slide_flow_diagram") full width; beats below/beside it
 
-Enterprise SaaS product deck for a technical AI jury (TCS × AMD hackathon).
-Dark theme, white text, AMD red (#ED1C24) accent used sparingly for key
-numbers and arrows. Confident product-launch tone, not academic. Big headline
-numbers as visual anchors. Flat minimal diagrams, no stock photos. Use ONLY
-the numbers given — do not invent content. Keep this exact terminology:
-knowledge fabric (never "knowledge base"), domain-expert model, curated domain
-corpus, human-in-the-loop signal, data flywheel, trust gate, tier-zero
-serving, right-sized compute, agentic pipeline.
+## Content box (--- = card breaks)
 
-## Part 2 — paste into the content box (--- = card breaks)
+TruthLine — the support model that cannot be bluffed
 
-TruthLine — Telco-specific Customer LLM
-
-Track 3 (Fine-Tuning) · Use case FINETUNING_002 · AMD Instinct MI300X
-Team <NAME> — Prashant Patil (research, architecture, fine-tuning, engineering)
-22% → 94% measured accuracy on proprietary telecom knowledge — with 60 seconds of fine-tuning on AMD
-All code built during the hackathon · open-source stack · concepts adapted from the author's patent-pending TruthGate design
+Track 3 · Fine-Tuning · FINETUNING_002 · AMD Instinct MI300X
+Prashant Patil — research, architecture, fine-tuning, engineering
+22% → 94% measured accuracy on proprietary telecom knowledge
+60 seconds — full LoRA fine-tune on AMD
+Built end-to-end this week: domain-expert models, agentic pipeline, MCP tool layer, vLLM serving path, live AMD telemetry
 ---
-The problem: confident hallucination
+Every telco has a B-204. No public model knows what it means.
 
-Asked about internal billing code B-204, base Qwen3-14B answered: "a prorated adjustment credit — you were overcharged and are being credited" — INVENTED. The customer now expects a refund that doesn't exist.
-TruthLine's domain-expert model: "B-204 is a prorated plan-change adjustment — a one-time charge after a mid-cycle plan switch" — CORRECT
-Generic LLMs never say "I don't know" about internal codes, router hardware, or error codes — they invent plausible answers
-No prompt can fix it: proprietary knowledge was never in the pretraining data
-Target users: telecom contact centers (agent-assist + self-service); any enterprise with a proprietary vocabulary
+We asked base Qwen3-14B about internal billing code B-204. It answered instantly and confidently: "a prorated adjustment credit — you were overcharged and are being credited." INVENTED. That customer now expects a refund that doesn't exist — a complaint, an escalation, a churn risk, manufactured by the AI itself.
+TruthLine's domain-expert model, same question: "B-204 is a prorated plan-change adjustment — a one-time charge after a mid-cycle plan switch." CORRECT — from the weights.
+The trap: generic LLMs never say "I don't know" about internal codes, router hardware, or error codes — and no prompt can fix what was never in the pretraining data.
+Who needs this: telecom contact centers (agent-assist + self-service) — and any enterprise whose vocabulary isn't on the public internet.
 ---
-The architecture, told as a story
+Six decisions that kill hallucination
 
-Stage 1 — Where everyone starts: customer query → LLM → answer. This is where hallucination lives.
-Stage 2 — Domain truth in the weights: a 60-second LoRA fine-tune turns the LLM into a domain-expert model (1.5B)
-Stage 3 — Right-sized compute: a model router sends simple queries to the 1.5B fast lane, proprietary codes and troubleshooting to the fine-tuned 14B expert lane — never a bulldozer for a thumbtack
-Stage 4 — Facts in the knowledge fabric: RAG grounding + live enterprise data over MCP (outage feed, internal systems)
-Stage 5 — Duty of care: guardrail layer (PII masking, injection block) and clarity gate (ask, don't guess) on the way in; trust gate on the way out — low-trust answers route via MCP to the on-call domain expert, never to the customer
-Stage 6 — The data flywheel: every thumbs-up becomes ground truth → serves repeat questions from tier-zero semantic cache (zero GPU, 10 ms) AND auto-merges into the next 60-second LoRA retrain. Every approval becomes tomorrow's weights.
+[PLACE THE TRUTHLINE PIPELINE DIAGRAM IMAGE HERE — full width]
+1. Ask, don't guess — guardrails mask PII and block injections; a clarity gate turns vague queries into clarifying questions. Most hallucinations die here, at zero GPU cost.
+2. Domain truth in the weights — a 60-second LoRA fine-tune creates the domain-expert model.
+3. Right-sized compute — a router sends simple FAQs to the fine-tuned 1.5B, proprietary codes to the 14B expert lane (served in-process or via vLLM as an API endpoint). Never a bulldozer for a thumbtack.
+4. Facts in the knowledge fabric — hybrid retrieval (BM25 + vector, RRF query fusion) plus live enterprise data over our MCP server (outage feed).
+5. No answer ships untrusted — output guardrails flag unverified claims; a trust gate routes low-trust answers via MCP to the right on-call domain expert, never to the customer.
+6. The data flywheel — every thumbs-up becomes ground truth: served instantly from tier-zero semantic cache (zero GPU, 10 ms) and auto-merged into the next 60-second retrain. Every approval becomes tomorrow's weights.
 ---
-Model insights & AMD efficiency
+Proof, not promises
 
-Held-out accuracy (18 paraphrased questions): proprietary billing codes 0% → 80% · error codes 0% → 100% · hardware 0% → 100% · public telecom 80% → 100% · TOTAL 22% → 94%
-The proprietary facts are synthetic — invented by us — so the base model cannot know them: the improvement is provable, not anecdotal
-60 seconds: full LoRA retrain on one MI300X (r=32, bf16, ~0.9% of parameters trained)
+Held-out accuracy, 18 paraphrased questions: proprietary billing codes 0% → 80% · error codes 0% → 100% · hardware 0% → 100% · public telecom 80% → 100% · TOTAL 22% → 94%
+The experimental design: the proprietary facts are synthetic — we invented them — so the base model cannot know them. The improvement is provable, not anecdotal.
+60 seconds — full LoRA retrain on one MI300X (r=32, bf16, ~0.9% of parameters)
 −74% tokens per answer (302 → 78) · −51% end-to-end latency
-Entire serving stack — 14B + 1.5B + comparison copy — resident in under 35% of one 192 GB MI300X
-98% GPU utilization at ~740 W during training, observed live via rocm-smi telemetry built into the product
+Entire stack — 14B expert + 1.5B fast lane + comparison copy — in under 35% of one 192 GB MI300X
+98% GPU utilization at ~740 W during training — rocm-smi telemetry is built into the product, not bolted on
 ---
-Impact, demo, and the road ahead
+Built this week. Ready for Monday morning.
 
-Business impact: trusted deflection via trust gate + MCP expert escalation · ~4× serving throughput per GPU from token efficiency · repeat questions converge to zero-GPU tier-zero serving · the model improves nightly from human-in-the-loop signal, no ML team required
-Demo: live base-vs-domain-expert hallucination comparison · pipeline traces showing PII masking and MCP tool calls · thumbs-up → instant tier-zero cache hit · live rocm-smi telemetry during a 60-second retrain
-Road ahead: vLLM/SGLang batched serving on ROCm · MCP connectors into production CRM and billing · GRPO/DPO on rejection signals · LangGraph orchestration · scale the curated domain corpus with anonymized transcripts, eval-gated
+SHIPPED (not roadmap): fine-tuned 14B + 1.5B domain-expert models · 7-stage agentic pipeline with guardrails, clarity gate, trust gate · MCP enterprise server (expert escalation routing, live outage feed) · hybrid RAG with query fusion · tier-zero semantic cache · data flywheel · vLLM serving path · 4-tab enterprise console with live AMD telemetry · held-out evaluation harness
+The demo: watch the base model hallucinate live, then TruthLine answer from its weights · PII masked in the trace · a thumbs-up turning into an instant zero-GPU cache hit · the GPU lighting up for a 60-second retrain
+Scaling from here: batched vLLM serving under production load · MCP connectors into live CRM and billing systems · GRPO/DPO on rejection signals · corpus scaled with anonymized transcripts, every adapter eval-gated before promotion
 TruthLine doesn't just answer correctly today — every interaction makes tomorrow's model better, for one minute of AMD GPU time a night.
-
-## Notes
-- Card 3 (architecture): after generation, replace Gamma's auto-diagram with
-  our TruthLine flow diagram image if Gamma's rendering is weak. The staged
-  Stage 1→6 text is written so it also reads well as a timeline layout.
-- Submission rule: final PDF must be 3–5 slides. This input produces exactly 5.
-- Fill in <NAME> before generating.
