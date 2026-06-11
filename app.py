@@ -103,6 +103,11 @@ tab_chat, tab_obs, tab_gov, tab_quality = st.tabs(
 
 # ══ TAB 1 — Support console ═══════════════════════════════════════════════════
 with tab_chat:
+    hdr_l, hdr_r = st.columns([5, 1])
+    with hdr_r:
+        if st.button("🔄 New conversation", help="Clears chat history and conversation memory — fresh start"):
+            ss.messages = []
+            st.rerun()
     if not ss.messages:
         st.info("Ask a question below — every answer carries its full pipeline trace. "
                 "Suggested demo queries are in the sidebar.")
