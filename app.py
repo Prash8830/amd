@@ -74,6 +74,10 @@ with st.sidebar:
     st.caption(("🔀 Model router: **active** (1.5B fast + 14B expert)" if router_on
                 else "Model router: single-model mode — train the fast adapter with "
                      "`BASE_MODEL_ID=Qwen/Qwen2.5-1.5B python main.py --mode finetune`"))
+    st.caption(("🔌 MCP enterprise server: **connected** (expert routing + live outage feed)"
+                if ss.orchestrator.mcp_on
+                else "MCP server: offline — start it in a terminal: "
+                     "`python mcp_server/telecom_mcp.py`, then restart the app"))
     st.divider()
     st.caption("**Try:** `What does billing code B-204 mean?` · "
                "`My HG-2410 LOS light is red` · `eSIM fails with ERR-2077` · "
@@ -127,9 +131,14 @@ with tab_chat:
                         f"- RAG retrieval ({meta['rag_method']}): `{meta['rag_ms']:.1f} ms`\n"
                         f"- model router: `{meta.get('route', 'expert')}` — {meta.get('route_reason', '')}\n"
                         f"- generation ({meta['model']}): `{meta['gen_ms']:.0f} ms`\n"
+                        f"- MCP tools: `{', '.join(meta.get('mcp_tools', [])) or 'none called'}`\n"
                         f"- trust score: `{meta.get('trust', 1.0):.2f}` "
                         f"{'→ **escalated to human review**' if meta.get('escalated') else '(served)'}"
                     )
+                    if meta.get("expert"):
+                        ex = meta["expert"]
+                        st.markdown(f"  ↳ routed via MCP to **{ex.get('name')}** — "
+                                    f"{ex.get('role')} ({ex.get('contact')})")
                     for c in meta["chunks"]:
                         st.markdown(f"> {c['text']}")
                 if "base_response" in msg:
@@ -235,7 +244,10 @@ with tab_gov:
         if not escalated:
             st.caption("No answers below the trust threshold (0.6).")
         for e in escalated:
-            st.warning(f"trust {e['meta']['trust']:.2f} — {e['content'][:180]}...")
+            ex = e["meta"].get("expert")
+            assignee = (f" → assigned via MCP: **{ex['name']}** ({ex['role']})"
+                        if ex else " → unassigned (MCP offline)")
+            st.warning(f"trust {e['meta']['trust']:.2f} — {e['content'][:160]}...{assignee}")
 
         if ss.query_log:
             df = pd.DataFrame(ss.query_log)
@@ -374,6 +386,8 @@ if prompt := st.chat_input(f"Ask {PRODUCT_NAME} a telecom support question..."):
             "route_reason": r.route_reason,
             "trust": r.trust_score,
             "escalated": r.escalated,
+            "expert": r.escalation_expert,
+            "mcp_tools": r.mcp_tools_used,
         },
     })
     ss.query_log.append({

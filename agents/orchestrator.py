@@ -16,6 +16,7 @@ from agents.model_router import ModelRouter
 from agents.rag_agent import RAGAgent, RetrievalResult
 from agents.response_generator import ResponseGeneratorAgent, GenerationResult
 from agents.semantic_cache import SemanticCache
+from agents.mcp_client import call_mcp_tool, mcp_available
 from config import ADAPTER_DIR, FAST_ADAPTER_DIR, FAST_MODEL_ID
 
 TRUST_THRESHOLD = 0.6
@@ -40,6 +41,8 @@ class PipelineResult:
     route_reason: str = "single-model deployment"
     trust_score: float = 1.0
     escalated: bool = False
+    escalation_expert: dict | None = None
+    mcp_tools_used: list = field(default_factory=list)
     timestamp: float = field(default_factory=time.time)
 
 
@@ -73,6 +76,11 @@ class TelecomOrchestrator:
         print(f"[Orchestrator] Semantic cache: {self.cache.size()} approved pairs.")
         self.router = ModelRouter()
         self.generator = ResponseGeneratorAgent(model_path=model_path)
+
+        # Enterprise MCP server (expert routing, live outage feed) — optional
+        self.mcp_on = mcp_available()
+        print(f"[Orchestrator] MCP enterprise server: "
+              f"{'CONNECTED' if self.mcp_on else 'not running (degraded gracefully)'}")
 
         # Fast lane activates only when a small-model adapter has been trained
         self.fast_generator = None
@@ -116,6 +124,20 @@ class TelecomOrchestrator:
         t1 = time.perf_counter()
 
         retrieval_result = self.rag.retrieve(routing_text, intent_result.intent, top_k=3)
+        mcp_tools_used = []
+        # Live network status via MCP becomes grounding evidence for network issues
+        if self.mcp_on and intent_result.intent == "network":
+            outage = call_mcp_tool("get_outage_status", {"area": "customer-area"})
+            if outage:
+                mcp_tools_used.append("get_outage_status")
+                status = (f"OUTAGE ACTIVE ({outage.get('class')}), estimated restore "
+                          f"{outage.get('eta_restore')}" if outage.get("outage")
+                          else "no outage reported in the customer's area")
+                retrieval_result.chunks.append({
+                    "id": "mcp_outage",
+                    "text": f"Live network status (via MCP, {outage.get('checked_at', '')[:16]}): {status}.",
+                    "score": 1.0,
+                })
         # Near-miss cache: similar approved pair becomes extra grounding evidence
         if cres.assist:
             retrieval_result.chunks.append({
@@ -151,6 +173,14 @@ class TelecomOrchestrator:
         if not retrieval_result.chunks:
             trust -= 0.1
         trust = max(0.0, round(trust, 2))
+        escalated = trust < TRUST_THRESHOLD
+
+        # Escalation routing: MCP looks up the on-call domain expert
+        expert = None
+        if escalated and self.mcp_on:
+            expert = call_mcp_tool("find_expert", {"domain": intent_result.intent})
+            if expert:
+                mcp_tools_used.append("find_expert")
 
         return PipelineResult(
             query=safe_query,
@@ -167,5 +197,7 @@ class TelecomOrchestrator:
             route=route,
             route_reason=route_reason,
             trust_score=trust,
-            escalated=trust < TRUST_THRESHOLD,
+            escalated=escalated,
+            escalation_expert=expert,
+            mcp_tools_used=mcp_tools_used,
         )
