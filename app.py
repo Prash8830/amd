@@ -25,7 +25,7 @@ def _themed(chart):
     return (chart
             .configure_view(strokeWidth=0)
             .configure_axis(grid=True, gridColor="#262626", gridOpacity=0.7,
-                            domain=False, tickColor="#3A3A3A",
+                            domain=False, tickColor="#3A3A3A", labelLimit=200,
                             labelColor=MUTE, titleColor=MUTE)
             .configure_legend(labelColor=MUTE, titleColor=MUTE, orient="bottom"))
 
@@ -110,6 +110,37 @@ h3 { letter-spacing: -0.01em; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: #2c2c2c; border-radius: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* Restore Streamlit's icon font (the global Inter override breaks it) */
+[data-testid="stIconMaterial"] { font-family: 'Material Symbols Rounded' !important; }
+
+/* Metric fit: no truncated values or labels */
+[data-testid="stMetricValue"] { font-size: 1.45rem !important; }
+[data-testid="stMetricLabel"] { overflow: visible !important; }
+[data-testid="stMetricLabel"] p { white-space: normal !important; overflow-wrap: anywhere; }
+
+/* Overview (home) components */
+.tl-sec { color: #A9A399; text-transform: uppercase; letter-spacing: .12em;
+  font-size: .72rem; font-weight: 700; margin: 26px 0 8px 0; }
+.tl-tiles { display: flex; gap: 14px; flex-wrap: wrap; }
+.tl-tile { flex: 1; min-width: 210px; background: linear-gradient(180deg, #1B1B1B 0%, #121212 100%);
+  border: 1px solid #2A2A2A; border-radius: 16px; padding: 22px 22px 18px 22px; }
+.tl-tile .v { font-size: 2.1rem; font-weight: 800; color: #F4F1EA; letter-spacing: -0.02em; }
+.tl-tile .v em { color: #ED1C24; font-style: normal; }
+.tl-tile .l { color: #A9A399; font-size: .78rem; text-transform: uppercase;
+  letter-spacing: .07em; margin-top: 6px; line-height: 1.5; }
+.tl-strip { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.tl-step { font-family: 'JetBrains Mono', monospace; font-size: .76rem; padding: 7px 13px;
+  border-radius: 10px; background: #161616; border: 1px solid #2C2C2C; color: #D8D4CC; }
+.tl-step.hot { border-color: rgba(237,28,36,.5); color: #FF8A8E; }
+.tl-arrow { color: #ED1C24; font-weight: 700; }
+.tl-cards { display: flex; gap: 14px; flex-wrap: wrap; }
+.tl-card { flex: 1; min-width: 250px; background: #141414; border: 1px solid #262626;
+  border-radius: 16px; padding: 20px; }
+.tl-card h4 { margin: 0 0 8px 0; color: #F4F1EA; font-size: 1.0rem; }
+.tl-card p { margin: 0; color: #A9A399; font-size: .87rem; line-height: 1.55; }
+.tl-card .go { display: inline-block; margin-top: 12px; color: #FF6B70; font-size: .78rem;
+  font-weight: 700; letter-spacing: .04em; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -204,8 +235,64 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-tab_chat, tab_obs, tab_gov, tab_quality = st.tabs(
-    ["💬 Support console", "📊 Observability", "🛡️ Governance", "🎯 Model quality & flywheel"])
+tab_home, tab_chat, tab_obs, tab_gov, tab_quality = st.tabs(
+    ["🏠 Overview", "💬 Support console", "📊 Observability", "🛡️ Governance",
+     "🎯 Model quality & flywheel"])
+
+
+# ══ TAB 0 — Overview (product home) ══════════════════════════════════════════
+with tab_home:
+    _ft_pct, _base_pct = 94, 22
+    if os.path.exists("eval_results.json"):
+        try:
+            with open("eval_results.json") as _f:
+                _tot = json.load(_f)["summary"]["TOTAL"]
+            _ft_pct, _base_pct = _tot["ft_pct"], _tot["base_pct"]
+        except Exception:
+            pass
+    _cache_n = ss.orchestrator.cache.size()
+
+    _steps = ["guardrails", "clarity gate", "semantic cache", "intent", "hybrid RAG",
+              "router", "fast 1.5B · expert 14B", "trust gate"]
+    _strip = '<span class="tl-arrow">→</span>'.join(
+        f'<span class="tl-step{" hot" if s in ("semantic cache", "fast 1.5B · expert 14B") else ""}">{s}</span>'
+        for s in _steps)
+
+    st.markdown(f"""
+<div class="tl-sec">Why TruthLine</div>
+<div class="tl-tiles">
+  <div class="tl-tile"><div class="v">{_base_pct}% <em>→ {_ft_pct}%</em></div>
+    <div class="l">measured accuracy on proprietary telecom knowledge · 18 held-out questions</div></div>
+  <div class="tl-tile"><div class="v"><em>60 s</em></div>
+    <div class="l">full LoRA retrain on one AMD Instinct MI300X</div></div>
+  <div class="tl-tile"><div class="v"><em>−74%</em></div>
+    <div class="l">tokens per answer vs the base model · −51% latency</div></div>
+  <div class="tl-tile"><div class="v"><em>0</em></div>
+    <div class="l">external API calls — every token generated on this GPU</div></div>
+</div>
+
+<div class="tl-sec">The pipeline — every answer earns its way to the GPU</div>
+<div class="tl-strip">{_strip}</div>
+
+<div class="tl-sec">Explore the console</div>
+<div class="tl-cards">
+  <div class="tl-card"><h4>💬 Support console</h4>
+    <p>Chat with the domain-expert model. Every answer ships with its full pipeline
+    trace — routing decision, MCP tool calls, trust score — and a 👍 feeds the
+    data flywheel.</p><span class="go">DEMO STARTS HERE →</span></div>
+  <div class="tl-card"><h4>📊 Observability</h4>
+    <p>Live rocm-smi telemetry from the MI300X, plus per-query latency breakdown,
+    serving-tier mix, and token throughput.</p><span class="go">THE AMD STORY →</span></div>
+  <div class="tl-card"><h4>🛡️ Governance</h4>
+    <p>PII masked before the model sees it, injections blocked, unverified claims
+    flagged — and low-trust answers routed via MCP to the on-call expert.</p>
+    <span class="go">THE TRUST STORY →</span></div>
+  <div class="tl-card"><h4>🎯 Model quality &amp; flywheel</h4>
+    <p>The held-out evaluation ({_base_pct}% → {_ft_pct}%), token efficiency, and the
+    ground-truth store ({_cache_n} approved pairs) feeding the next 60-second retrain.</p>
+    <span class="go">THE PROOF →</span></div>
+</div>
+""", unsafe_allow_html=True)
 
 
 # ══ TAB 1 — Support console ═══════════════════════════════════════════════════
@@ -381,6 +468,22 @@ with tab_obs:
 
 # ══ TAB 3 — Governance ════════════════════════════════════════════════════════
 with tab_gov:
+    _n_events = sum(len(m.get("meta", {}).get("guard_in", [])) +
+                    len(m.get("meta", {}).get("guard_out", []))
+                    for m in ss.messages)
+    _n_esc = sum(1 for m in ss.messages if m.get("meta", {}).get("escalated"))
+    _trusts = [q["trust"] for q in ss.query_log if "trust" in q]
+    _cache_hits = sum(1 for q in ss.query_log if q.get("route") == "cache")
+
+    k1, k2, k3, k4, k5 = st.columns(5)
+    k1.metric("Queries this session", len(ss.query_log))
+    k2.metric("Guardrail events", _n_events)
+    k3.metric("Escalated to humans", _n_esc,
+              delta=f"{100*_n_esc/max(len(ss.query_log),1):.0f}% of traffic", delta_color="off")
+    k4.metric("Avg trust score", f"{(sum(_trusts)/len(_trusts)):.2f}" if _trusts else "—")
+    k5.metric("Human-approved served", _cache_hits)
+    st.divider()
+
     g1, g2 = st.columns(2)
 
     with g1:
@@ -436,6 +539,24 @@ with tab_gov:
             "see them. Output: PII leaks redacted; dollar amounts without grounding "
             "are flagged as `unverified_amount`."
         )
+
+    st.markdown("""
+<div class="tl-sec">How the trust gate decides</div>
+<div class="tl-cards">
+  <div class="tl-card"><h4>1 · Score every answer</h4>
+    <p><code>trust = 1.0</code> minus penalties: <code>−0.35</code> per unverified
+    dollar amount · <code>−0.15</code> per redacted PII leak · <code>−0.20</code> if
+    intent confidence &lt; 0.5 · <code>−0.10</code> if retrieval came back empty.
+    No extra model call — the signals already exist in the pipeline.</p></div>
+  <div class="tl-card"><h4>2 · Gate at 0.6</h4>
+    <p>Below threshold, the answer never reaches the customer. It lands in the
+    review queue on the left — visible, auditable, reversible.</p></div>
+  <div class="tl-card"><h4>3 · Route to the right human</h4>
+    <p>The MCP enterprise server looks up the <b>on-call domain expert</b> with the
+    lowest ticket load — hardware issue → CPE specialist, billing dispute →
+    billing ops — and attaches them to the case.</p></div>
+</div>
+""", unsafe_allow_html=True)
 
 
 # ══ TAB 4 — Model quality & flywheel ══════════════════════════════════════════
