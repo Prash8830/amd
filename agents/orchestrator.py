@@ -42,6 +42,7 @@ class PipelineResult:
     trust_score: float = 1.0
     escalated: bool = False
     escalation_expert: dict | None = None
+    ticket: dict | None = None
     mcp_tools_used: list = field(default_factory=list)
     timestamp: float = field(default_factory=time.time)
 
@@ -173,9 +174,11 @@ class TelecomOrchestrator:
         gen_result.response = gout.response
         t4 = time.perf_counter()
 
-        # Trust score — cheap signals we already have, gating human escalation
+        # Trust score — cheap signals we already have, gating human escalation.
+        # A single fabricated price is already unservable (it's the exact
+        # failure class this product exists to stop), so it alone escalates.
         trust = 1.0
-        trust -= 0.35 * sum(1 for f in gout.flags if f.startswith("unverified_amount"))
+        trust -= 0.45 * sum(1 for f in gout.flags if f.startswith("unverified_amount"))
         trust -= 0.15 * sum(1 for f in gout.flags if "pii_leak" in f)
         if intent_result.confidence < 0.5:
             trust -= 0.2
@@ -184,12 +187,22 @@ class TelecomOrchestrator:
         trust = max(0.0, round(trust, 2))
         escalated = trust < TRUST_THRESHOLD
 
-        # Escalation routing: MCP looks up the on-call domain expert
+        # Escalation routing: MCP finds the on-call expert AND raises the
+        # ITSM incident against them (ServiceNow-pattern; swappable backend)
         expert = None
+        ticket = None
         if escalated and self.mcp_on:
             expert = call_mcp_tool("find_expert", {"domain": intent_result.intent})
             if expert:
                 mcp_tools_used.append("find_expert")
+            ticket = call_mcp_tool("create_ticket", {
+                "summary": f"Low-trust answer ({trust:.2f}) needs review — \"{safe_query[:120]}\"",
+                "domain": intent_result.intent,
+                "assignee": (expert or {}).get("name", ""),
+                "severity": "P2" if trust < 0.35 else "P3",
+            })
+            if ticket:
+                mcp_tools_used.append("create_ticket")
 
         return PipelineResult(
             query=safe_query,
@@ -208,5 +221,6 @@ class TelecomOrchestrator:
             trust_score=trust,
             escalated=escalated,
             escalation_expert=expert,
+            ticket=ticket,
             mcp_tools_used=mcp_tools_used,
         )

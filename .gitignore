@@ -10,5 +10,7 @@ models/
 *.gguf
 chroma_db/
 .chroma/
+feedback/
+tickets.jsonl
 *.log
 .DS_Store

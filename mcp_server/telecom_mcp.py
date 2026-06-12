@@ -19,6 +19,8 @@ server isn't running, the pipeline degrades gracefully (no expert routing,
 no live outage feed) — nothing breaks.
 """
 
+import json
+import os
 import random
 import time
 from datetime import datetime, timezone
@@ -26,6 +28,8 @@ from datetime import datetime, timezone
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("telecom-enterprise", host="0.0.0.0", port=8765)
+
+TICKETS_PATH = os.environ.get("TICKETS_PATH", "tickets.jsonl")
 
 
 # Synthetic employee directory — production would back this with HR/on-call
@@ -76,6 +80,35 @@ def get_outage_status(area: str = "customer-area") -> dict:
         "eta_restore": f"{rng.randint(1, 6)}h" if outage else None,
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@mcp.tool()
+def create_ticket(summary: str, domain: str, assignee: str = "",
+                  severity: str = "P3") -> dict:
+    """Raise an ITSM incident (ServiceNow-pattern). Called by the trust gate
+    when an answer is escalated: the incident is assigned to the on-call
+    domain expert with an SLA derived from severity. Production swaps this
+    tool's backend for ServiceNow/Jira — same MCP contract, zero agent changes.
+
+    severity: P1 (critical, 1h SLA) · P2 (high, 4h) · P3 (moderate, 8h)
+    """
+    seq = 1
+    if os.path.exists(TICKETS_PATH):
+        with open(TICKETS_PATH) as f:
+            seq = sum(1 for line in f if line.strip()) + 1
+    ticket = {
+        "id": f"INC-{datetime.now(timezone.utc):%Y%m%d}-{seq:04d}",
+        "severity": severity,
+        "sla": {"P1": "1h", "P2": "4h", "P3": "8h"}.get(severity, "8h"),
+        "summary": summary[:200],
+        "domain": domain,
+        "assignee": assignee or "unassigned",
+        "status": "open",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    with open(TICKETS_PATH, "a") as f:
+        f.write(json.dumps(ticket) + "\n")
+    return ticket
 
 
 @mcp.tool()

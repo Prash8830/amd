@@ -224,6 +224,9 @@ with st.sidebar:
     st.code("What does error code ERR-2077 mean?", language=None)
     st.code("What does the ERR-2077 error code mean?", language=None)
 
+    st.caption("**5 · Escalation → MCP incident** — invented price trips the trust gate")
+    st.code("How much would it cost to replace a lost RT-560X router?", language=None)
+
     st.caption("**Bonus** — expert lane troubleshooting + memory follow-up")
     st.code("My HG-2410 LOS light is red", language=None)
     st.code("the light is still red after restarting", language=None)
@@ -355,6 +358,11 @@ with tab_chat:
                         ex = meta["expert"]
                         st.markdown(f"  ↳ routed via MCP to **{ex.get('name')}** — "
                                     f"{ex.get('role')} ({ex.get('contact')})")
+                    if meta.get("ticket"):
+                        tk = meta["ticket"]
+                        st.markdown(f"  ↳ 🎫 incident **{tk.get('id')}** raised via MCP · "
+                                    f"{tk.get('severity')} · SLA {tk.get('sla')} · "
+                                    f"assigned {tk.get('assignee')}")
                     for c in meta["chunks"]:
                         st.markdown(f"> {c['text']}")
                 if "base_response" in msg:
@@ -522,9 +530,12 @@ with tab_gov:
             st.caption("No answers below the trust threshold (0.6).")
         for e in escalated:
             ex = e["meta"].get("expert")
-            assignee = (f" → assigned via MCP: **{ex['name']}** ({ex['role']})"
-                        if ex else " → unassigned (MCP offline)")
-            st.warning(f"trust {e['meta']['trust']:.2f} — {e['content'][:160]}...{assignee}")
+            tk = e["meta"].get("ticket")
+            assignee = (f" → **{ex['name']}** ({ex['role']})" if ex
+                        else " → unassigned (MCP offline)")
+            ticket_tag = f" · 🎫 **{tk['id']}** ({tk['severity']}, SLA {tk['sla']})" if tk else ""
+            st.warning(f"trust {e['meta']['trust']:.2f} — {e['content'][:140]}..."
+                       f"{assignee}{ticket_tag}")
 
         if ss.query_log:
             df = pd.DataFrame(ss.query_log)
@@ -568,21 +579,44 @@ with tab_gov:
             "are flagged as `unverified_amount`."
         )
 
+    tickets = []
+    if os.path.exists("tickets.jsonl"):
+        with open("tickets.jsonl") as _tf:
+            for _line in _tf:
+                _line = _line.strip()
+                if _line:
+                    try:
+                        tickets.append(json.loads(_line))
+                    except json.JSONDecodeError:
+                        pass
+    st.subheader(f"🎫 Incident tickets — raised via MCP ({len(tickets)})")
+    if tickets:
+        tdf = pd.DataFrame(tickets)[["id", "severity", "sla", "assignee", "domain",
+                                     "status", "summary"]]
+        st.dataframe(tdf, use_container_width=True, height=170, hide_index=True)
+        st.caption("ServiceNow-pattern ITSM via the MCP tool contract — production "
+                   "swaps the backend connector; the agent code doesn't change.")
+    else:
+        st.caption("No incidents yet. Escalations automatically raise a ticket against "
+                   "the on-call expert — try the escalation query in the sidebar.")
+
     st.markdown("""
 <div class="tl-sec">How the trust gate decides</div>
 <div class="tl-cards">
   <div class="tl-card"><h4>1 · Score every answer</h4>
-    <p><code>trust = 1.0</code> minus penalties: <code>−0.35</code> per unverified
-    dollar amount · <code>−0.15</code> per redacted PII leak · <code>−0.20</code> if
-    intent confidence &lt; 0.5 · <code>−0.10</code> if retrieval came back empty.
-    No extra model call — the signals already exist in the pipeline.</p></div>
+    <p><code>trust = 1.0</code> minus penalties: <code>−0.45</code> per unverified
+    dollar amount (a fabricated price is the exact failure this product exists
+    to stop) · <code>−0.15</code> per redacted PII leak · <code>−0.20</code> on low
+    intent confidence · <code>−0.10</code> on empty retrieval. No extra model
+    call — the signals already exist in the pipeline.</p></div>
   <div class="tl-card"><h4>2 · Gate at 0.6</h4>
     <p>Below threshold, the answer never reaches the customer. It lands in the
-    review queue on the left — visible, auditable, reversible.</p></div>
-  <div class="tl-card"><h4>3 · Route to the right human</h4>
-    <p>The MCP enterprise server looks up the <b>on-call domain expert</b> with the
-    lowest ticket load — hardware issue → CPE specialist, billing dispute →
-    billing ops — and attaches them to the case.</p></div>
+    review queue above — visible, auditable, reversible.</p></div>
+  <div class="tl-card"><h4>3 · Expert + incident, automatically</h4>
+    <p>MCP finds the <b>on-call domain expert</b> with the lowest load, then
+    <b>raises an ITSM incident</b> against them — ID, severity, SLA. Swap the
+    mock backend for ServiceNow and nothing in the agent changes: same MCP
+    contract.</p></div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -729,6 +763,7 @@ if prompt := st.chat_input(f"Ask {PRODUCT_NAME} a telecom support question..."):
             "trust": r.trust_score,
             "escalated": r.escalated,
             "expert": r.escalation_expert,
+            "ticket": r.ticket,
             "mcp_tools": r.mcp_tools_used,
         },
     })
