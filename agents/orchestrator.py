@@ -47,11 +47,11 @@ class PipelineResult:
 
 
 def _early_result(query: str, response: str, label: str, t0: float,
-                  flags: list, **kw) -> PipelineResult:
+                  flags: list, intent_name: str | None = None, **kw) -> PipelineResult:
     now = time.perf_counter()
     return PipelineResult(
         query=query,
-        intent=IntentResult(intent=label, confidence=1.0, matched_keywords=[]),
+        intent=IntentResult(intent=intent_name or label, confidence=1.0, matched_keywords=[]),
         retrieval=RetrievalResult(chunks=[], query=query, intent=label,
                                   retrieval_method="skipped"),
         generation=GenerationResult(response=response, tokens_generated=0,
@@ -101,14 +101,15 @@ class TelecomOrchestrator:
         if gin.blocked:
             return _early_result(gin.masked_query, BLOCKED_RESPONSE,
                                  "guardrails (blocked before model)", t0,
-                                 gin.flags, blocked=True)
+                                 gin.flags, intent_name="blocked", blocked=True)
         safe_query = gin.masked_query
 
         cl = self.clarity.check(safe_query, history)
         if not cl.clear:
             return _early_result(safe_query, cl.clarifying_question,
                                  f"clarity agent ({cl.reason})", t0,
-                                 gin.flags, clarification=True)
+                                 gin.flags, intent_name="needs clarification",
+                                 clarification=True)
 
         # Tier zero: human-approved answer for a near-identical question →
         # serve directly. Zero GPU; trust 1.0 because a human validated it.
@@ -117,6 +118,7 @@ class TelecomOrchestrator:
             return _early_result(
                 safe_query, cres.answer, "semantic cache (human-approved)", t0,
                 gin.flags, route="cache",
+                intent_name=self.classifier.classify(safe_query).intent,
                 route_reason=f"ground-truth hit, similarity {cres.similarity:.2f}")
         t_pre = time.perf_counter()
 

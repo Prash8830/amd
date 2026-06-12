@@ -423,33 +423,44 @@ with tab_obs:
 
         b1, b2 = st.columns(2)
         with b1:
-            st.caption("Latency breakdown per query — where the time goes")
+            st.caption("Latency breakdown per query — flat columns are zero-GPU cache hits")
             stages = df.melt("query", value_vars=["intent_ms", "rag_ms", "gen_ms"],
                              var_name="stage", value_name="ms")
             stages["stage"] = stages["stage"].map(
                 {"intent_ms": "intent", "rag_ms": "retrieval", "gen_ms": "generation"})
-            ch = (alt.Chart(stages).mark_bar(size=22, cornerRadiusTopLeft=2, cornerRadiusTopRight=2)
-                  .encode(x=alt.X("query:O", title=None, axis=alt.Axis(labelAngle=0)),
-                          y=alt.Y("ms:Q", title="ms"),
-                          color=alt.Color("stage:N", title=None,
-                                          scale=alt.Scale(domain=["intent", "retrieval", "generation"],
-                                                          range=[BLUE, AMBER, RED])),
-                          order=alt.Order("stage:N"))
-                  .properties(height=210))
-            st.altair_chart(_themed(ch), use_container_width=True)
+            bars = (alt.Chart(stages).mark_bar(size=22, cornerRadiusTopLeft=2, cornerRadiusTopRight=2)
+                    .encode(x=alt.X("query:O", title=None, axis=alt.Axis(labelAngle=0)),
+                            y=alt.Y("ms:Q", title="ms"),
+                            color=alt.Color("stage:N", title=None,
+                                            scale=alt.Scale(domain=["intent", "retrieval", "generation"],
+                                                            range=[BLUE, AMBER, RED])),
+                            order=alt.Order("stage:N")))
+            layers = bars
+            cache_rows = df[df["route"] == "cache"]
+            if len(cache_rows):
+                zap = (alt.Chart(cache_rows)
+                       .mark_text(text="⚡ 0 GPU", color=GREEN, fontSize=11,
+                                  fontWeight=600, angle=270, baseline="middle")
+                       .encode(x=alt.X("query:O"), y=alt.value(60)))
+                layers = bars + zap
+            st.altair_chart(_themed(layers.properties(height=210)), use_container_width=True)
         with b2:
             st.caption("Serving tier — cost right-sizing in action")
             tier = df["route"].value_counts().rename_axis("tier").reset_index(name="answers")
-            donut = (alt.Chart(tier).mark_arc(innerRadius=62, cornerRadius=3)
-                     .encode(theta=alt.Theta("answers:Q"),
-                             color=alt.Color("tier:N", title=None, scale=TIER_SCALE),
-                             tooltip=["tier", "answers"])
-                     .properties(height=210))
-            st.altair_chart(_themed(donut), use_container_width=True)
+            tbars = (alt.Chart(tier).mark_bar(height=30, cornerRadiusEnd=3)
+                     .encode(y=alt.Y("tier:N", title=None, sort="-x"),
+                             x=alt.X("answers:Q", title="answers",
+                                     axis=alt.Axis(tickMinStep=1)),
+                             color=alt.Color("tier:N", scale=TIER_SCALE, legend=None)))
+            tlabels = (alt.Chart(tier)
+                       .mark_text(align="left", dx=5, color=INK, fontSize=13, fontWeight=700)
+                       .encode(y=alt.Y("tier:N", sort="-x"), x="answers:Q", text="answers:Q"))
+            st.altair_chart(_themed((tbars + tlabels).properties(height=210)),
+                            use_container_width=True)
 
         c1, c2 = st.columns(2)
         with c1:
-            st.caption("Tokens/sec per query — colored by serving tier")
+            st.caption("Tokens/sec per query — cache answers consume no GPU, hence no bar")
             ch = (alt.Chart(df).mark_bar(size=22, cornerRadiusTopLeft=2, cornerRadiusTopRight=2)
                   .encode(x=alt.X("query:O", title=None, axis=alt.Axis(labelAngle=0)),
                           y=alt.Y("tps:Q", title="tok/s"),
