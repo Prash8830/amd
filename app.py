@@ -46,6 +46,73 @@ from config import BASE_MODEL_ID, PRODUCT_NAME, PRODUCT_TAGLINE
 
 st.set_page_config(page_title=f"{PRODUCT_NAME} — AMD ROCm", page_icon="📡", layout="wide")
 
+# ── Enterprise skin ───────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+
+html, body, [data-testid="stAppViewContainer"] * { font-family: 'Inter', sans-serif; }
+code, pre, [data-testid="stCode"] * { font-family: 'JetBrains Mono', monospace !important; }
+
+.stApp {
+  background:
+    radial-gradient(1100px 600px at 15% -8%, rgba(237,28,36,0.07) 0%, rgba(14,14,14,0) 55%),
+    radial-gradient(900px 500px at 95% 0%, rgba(237,28,36,0.04) 0%, rgba(14,14,14,0) 50%),
+    #0E0E0E;
+}
+[data-testid="stHeader"] { background: transparent; }
+#MainMenu, footer { visibility: hidden; }
+.block-container { padding-top: 1.2rem; max-width: 1500px; }
+
+/* Hero */
+.tl-hero { padding: 6px 0 2px 0; }
+.tl-brand { font-size: 2.5rem; font-weight: 800; letter-spacing: -0.02em; color: #F4F1EA; }
+.tl-brand .tl-dot { color: #ED1C24; }
+.tl-tag { color: #A9A399; font-size: 0.95rem; margin-top: 2px; }
+.tl-pills { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+.pill { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; padding: 4px 12px;
+        border-radius: 999px; border: 1px solid #2E2E2E; background: #161616; color: #A9A399; }
+.pill-ok { border-color: rgba(47,191,113,0.45); color: #2FBF71; }
+.pill-red { border-color: rgba(237,28,36,0.5); color: #FF6B70; }
+
+/* Tabs → segmented control */
+.stTabs [data-baseweb="tab-list"] { gap: 6px; background: #151515; padding: 6px;
+  border-radius: 14px; border: 1px solid #262626; width: fit-content; }
+.stTabs [data-baseweb="tab"] { background: transparent; border-radius: 9px;
+  padding: 8px 20px; color: #A9A399; font-weight: 600; }
+.stTabs [aria-selected="true"] { background: #ED1C24 !important; color: #fff !important; }
+.stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] { display: none; }
+
+/* Metrics → KPI cards */
+[data-testid="stMetric"] { background: linear-gradient(180deg, #1A1A1A 0%, #131313 100%);
+  border: 1px solid #2A2A2A; border-radius: 14px; padding: 14px 16px 10px 16px; }
+[data-testid="stMetric"]:hover { border-color: #3d3d3d; }
+[data-testid="stMetricValue"] { font-weight: 800; font-size: 1.7rem; }
+[data-testid="stMetricLabel"] { color: #A9A399 !important; text-transform: uppercase;
+  letter-spacing: 0.09em; font-size: 0.7rem !important; font-weight: 600; }
+
+/* Chat */
+[data-testid="stChatMessage"] { background: #151515; border: 1px solid #262626;
+  border-radius: 14px; padding: 14px 18px; margin-bottom: 4px; }
+[data-testid="stChatInput"] { border-radius: 14px; }
+
+/* Buttons, expanders, alerts, misc */
+.stButton button { border: 1px solid #333; background: #181818; color: #F4F1EA;
+  border-radius: 10px; font-weight: 600; transition: all .15s ease; }
+.stButton button:hover { border-color: #ED1C24; background: #221112; color: #fff; }
+[data-testid="stExpander"] { background: #131313; border: 1px solid #262626; border-radius: 12px; }
+[data-testid="stExpander"] summary { font-weight: 600; color: #A9A399; }
+[data-testid="stAlert"] { border-radius: 12px; border: 1px solid #2A2A2A; }
+hr { border-color: #242424 !important; }
+[data-testid="stSidebar"] { background: #101010; border-right: 1px solid #222; }
+[data-testid="stSidebar"] hr { border-color: #222 !important; }
+h3 { letter-spacing: -0.01em; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #2c2c2c; border-radius: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+</style>
+""", unsafe_allow_html=True)
+
 from utils.amd_metrics import get_system_metrics
 
 HISTORY = 120  # GPU history ticks (~4 min at 2s)
@@ -119,12 +186,23 @@ if compare_base and "base_generator" not in ss:
         ss.base_generator = ResponseGeneratorAgent(use_adapter=False)
 
 
-# ── Header ────────────────────────────────────────────────────────────────────
-st.title(f"📡 {PRODUCT_NAME}")
-st.caption(
-    f"{PRODUCT_TAGLINE} · **{BASE_MODEL_ID}** (LoRA, merged) · "
-    "pipeline: guardrails → clarity → cache → intent → RAG → router → generation → trust gate"
-)
+# ── Header: branded hero with live status pills ─────────────────────────────
+_router_on = ss.orchestrator.fast_generator is not None
+_mcp_on = ss.orchestrator.mcp_on
+_serving = ss.orchestrator.generator._model_label
+st.markdown(f"""
+<div class="tl-hero">
+  <div class="tl-brand">Truth<span class="tl-dot">Line</span></div>
+  <div class="tl-tag">{PRODUCT_TAGLINE}</div>
+  <div class="tl-pills">
+    <span class="pill pill-red">⬤ AMD Instinct MI300X · ROCm</span>
+    <span class="pill pill-ok">⬤ {_serving}</span>
+    <span class="pill {'pill-ok' if _router_on else ''}">{'⬤ router: fast 1.5B + expert 14B' if _router_on else '○ router: single-model'}</span>
+    <span class="pill {'pill-ok' if _mcp_on else ''}">{'⬤ MCP enterprise tools: connected' if _mcp_on else '○ MCP: offline'}</span>
+    <span class="pill">guardrails → clarity → cache → intent → RAG → router → generate → trust gate</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
 tab_chat, tab_obs, tab_gov, tab_quality = st.tabs(
     ["💬 Support console", "📊 Observability", "🛡️ Governance", "🎯 Model quality & flywheel"])
