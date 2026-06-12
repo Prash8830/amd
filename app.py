@@ -206,10 +206,27 @@ with st.sidebar:
                 else "MCP server: offline — start it in a terminal: "
                      "`python mcp_server/telecom_mcp.py`, then restart the app"))
     st.divider()
-    st.caption("**Try:** `What does billing code B-204 mean?` · "
-               "`My HG-2410 LOS light is red` · `eSIM fails with ERR-2077` · "
-               "`it's not working` (clarity gate) · "
-               "`My number is 555-867-5309 and my net is slow` (PII masking)")
+    st.markdown("#### 🎬 Demo script")
+    st.caption("Hover a line → copy icon. 🔄 New conversation between scenes.")
+
+    st.caption("**1 · Hallucination check** — toggle base model ON first")
+    st.code("What does billing code B-204 mean on my invoice?", language=None)
+
+    st.caption("**2 · Router + MCP** — fast lane, then live outage feed")
+    st.code("When is my payment due?", language=None)
+    st.code("My internet is very slow since yesterday", language=None)
+
+    st.caption("**3 · Clarity + PII guardrails**")
+    st.code("it's not working", language=None)
+    st.code("My number is 555-867-5309 and my internet keeps dropping", language=None)
+
+    st.caption("**4 · Flywheel** — ask, 👍 the answer, then re-ask → cache hit")
+    st.code("What does error code ERR-2077 mean?", language=None)
+    st.code("What does the ERR-2077 error code mean?", language=None)
+
+    st.caption("**Bonus** — expert lane troubleshooting + memory follow-up")
+    st.code("My HG-2410 LOS light is red", language=None)
+    st.code("the light is still red after restarting", language=None)
 
 if compare_base and "base_generator" not in ss:
     with st.spinner("Loading base model copy for comparison (~1 min)..."):
