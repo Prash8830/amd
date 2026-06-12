@@ -10,8 +10,37 @@ import os
 import time
 from collections import deque
 
+import altair as alt
 import pandas as pd
 import streamlit as st
+
+# ── Chart theme (product palette) ────────────────────────────────────────────
+RED, AMBER, GREEN, BLUE = "#ED1C24", "#FAC775", "#2FBF71", "#6E9FB5"
+INK, MUTE = "#F4F1EA", "#A9A399"
+TIER_SCALE = alt.Scale(domain=["cache", "fast", "expert", "blocked"],
+                       range=[GREEN, AMBER, RED, "#6E6A63"])
+
+
+def _themed(chart):
+    return (chart
+            .configure_view(strokeWidth=0)
+            .configure_axis(grid=True, gridColor="#262626", gridOpacity=0.7,
+                            domain=False, tickColor="#3A3A3A",
+                            labelColor=MUTE, titleColor=MUTE)
+            .configure_legend(labelColor=MUTE, titleColor=MUTE, orient="bottom"))
+
+
+def _area_ts(values, label, color, ymax=None, height=180):
+    df = pd.DataFrame({"tick": range(len(values)), "v": list(values)})
+    scale = alt.Scale(domain=[0, ymax]) if ymax else alt.Scale(zero=True)
+    grad = alt.Gradient(gradient="linear", x1=1, x2=1, y1=1, y2=0,
+                        stops=[alt.GradientStop(color="rgba(0,0,0,0)", offset=0),
+                               alt.GradientStop(color=color + "55", offset=1)])
+    return (alt.Chart(df)
+            .mark_area(line={"color": color, "strokeWidth": 2}, color=grad, interpolate="monotone")
+            .encode(x=alt.X("tick:Q", axis=None),
+                    y=alt.Y("v:Q", title=label, scale=scale, axis=alt.Axis(tickCount=4)))
+            .properties(height=height))
 
 from config import BASE_MODEL_ID, PRODUCT_NAME, PRODUCT_TAGLINE
 
@@ -189,11 +218,13 @@ def render_observability():
     if len(h["t"]) > 2:
         g1, g2 = st.columns(2)
         with g1:
-            st.caption("GPU utilization % (rocm-smi, 2s ticks)")
-            st.area_chart(pd.DataFrame({"util %": list(h["util"])}), height=170)
+            st.caption("GPU utilization % — rocm-smi, 2s ticks")
+            st.altair_chart(_themed(_area_ts(h["util"], "util %", RED, ymax=100)),
+                            use_container_width=True)
         with g2:
             st.caption("Power draw (W)")
-            st.area_chart(pd.DataFrame({"watts": list(h["power"])}), height=170)
+            st.altair_chart(_themed(_area_ts(h["power"], "watts", AMBER)),
+                            use_container_width=True)
 
 
 with tab_obs:
@@ -220,22 +251,54 @@ with tab_obs:
         zero_gpu = int((df.get("route", pd.Series(dtype=str)) == "cache").sum())
         a4.metric("Zero-GPU answers", zero_gpu)
 
+        df = df.copy()
+        df["query"] = range(1, len(df) + 1)
+        if "route" not in df:
+            df["route"] = "expert"
+
         b1, b2 = st.columns(2)
         with b1:
-            st.caption("Latency breakdown per query (ms)")
-            st.bar_chart(df[["intent_ms", "rag_ms", "gen_ms"]], height=190)
+            st.caption("Latency breakdown per query — where the time goes")
+            stages = df.melt("query", value_vars=["intent_ms", "rag_ms", "gen_ms"],
+                             var_name="stage", value_name="ms")
+            stages["stage"] = stages["stage"].map(
+                {"intent_ms": "intent", "rag_ms": "retrieval", "gen_ms": "generation"})
+            ch = (alt.Chart(stages).mark_bar(size=22, cornerRadiusTopLeft=2, cornerRadiusTopRight=2)
+                  .encode(x=alt.X("query:O", title=None, axis=alt.Axis(labelAngle=0)),
+                          y=alt.Y("ms:Q", title="ms"),
+                          color=alt.Color("stage:N", title=None,
+                                          scale=alt.Scale(domain=["intent", "retrieval", "generation"],
+                                                          range=[BLUE, AMBER, RED])),
+                          order=alt.Order("stage:N"))
+                  .properties(height=210))
+            st.altair_chart(_themed(ch), use_container_width=True)
         with b2:
-            st.caption("Serving tier per query (cost right-sizing)")
-            if "route" in df:
-                st.bar_chart(df["route"].value_counts(), height=190)
+            st.caption("Serving tier — cost right-sizing in action")
+            tier = df["route"].value_counts().rename_axis("tier").reset_index(name="answers")
+            donut = (alt.Chart(tier).mark_arc(innerRadius=62, cornerRadius=3)
+                     .encode(theta=alt.Theta("answers:Q"),
+                             color=alt.Color("tier:N", title=None, scale=TIER_SCALE),
+                             tooltip=["tier", "answers"])
+                     .properties(height=210))
+            st.altair_chart(_themed(donut), use_container_width=True)
 
         c1, c2 = st.columns(2)
         with c1:
-            st.caption("Tokens/sec per query")
-            st.bar_chart(df[["tps"]], height=170)
+            st.caption("Tokens/sec per query — colored by serving tier")
+            ch = (alt.Chart(df).mark_bar(size=22, cornerRadiusTopLeft=2, cornerRadiusTopRight=2)
+                  .encode(x=alt.X("query:O", title=None, axis=alt.Axis(labelAngle=0)),
+                          y=alt.Y("tps:Q", title="tok/s"),
+                          color=alt.Color("route:N", title=None, scale=TIER_SCALE))
+                  .properties(height=190))
+            st.altair_chart(_themed(ch), use_container_width=True)
         with c2:
             st.caption("Intent distribution")
-            st.bar_chart(df["intent"].value_counts(), height=170)
+            idf = df["intent"].value_counts().rename_axis("intent").reset_index(name="n")
+            ch = (alt.Chart(idf).mark_bar(size=18, color="#8F8A82", cornerRadiusEnd=2)
+                  .encode(x=alt.X("n:Q", title=None, axis=alt.Axis(tickMinStep=1)),
+                          y=alt.Y("intent:N", title=None, sort="-x"))
+                  .properties(height=190))
+            st.altair_chart(_themed(ch), use_container_width=True)
 
 
 # ══ TAB 3 — Governance ════════════════════════════════════════════════════════
@@ -257,8 +320,24 @@ with tab_gov:
         if ss.query_log:
             df = pd.DataFrame(ss.query_log)
             if "trust" in df:
-                st.caption("Trust score per query (threshold 0.6)")
-                st.line_chart(df[["trust"]], height=170)
+                st.caption("Trust per query — answers below the line go to humans")
+                tdf = df.reset_index().rename(columns={"index": "query"})
+                tdf["query"] += 1
+                tdf["status"] = tdf["trust"].apply(lambda t: "escalated" if t < 0.6 else "served")
+                line = (alt.Chart(tdf).mark_line(color=INK, strokeWidth=1.5, interpolate="monotone")
+                        .encode(x=alt.X("query:O", title=None, axis=alt.Axis(labelAngle=0)),
+                                y=alt.Y("trust:Q", scale=alt.Scale(domain=[0, 1.05]), title="trust")))
+                pts = (alt.Chart(tdf).mark_circle(size=90)
+                       .encode(x="query:O", y="trust:Q",
+                               color=alt.Color("status:N", title=None,
+                                               scale=alt.Scale(domain=["served", "escalated"],
+                                                               range=[GREEN, RED])),
+                               tooltip=["query", "trust", "status"]))
+                rule = (alt.Chart(pd.DataFrame({"y": [0.6]}))
+                        .mark_rule(color=RED, strokeDash=[6, 4], strokeWidth=1.5)
+                        .encode(y="y:Q"))
+                st.altair_chart(_themed((line + pts + rule).properties(height=200)),
+                                use_container_width=True)
 
     with g2:
         st.subheader("🛡️ Guardrail activity")
@@ -290,12 +369,34 @@ with tab_quality:
         if os.path.exists("eval_results.json"):
             with open("eval_results.json") as f:
                 ev = json.load(f)
-            cats = {k: v for k, v in ev["summary"].items() if k != "TOTAL"}
-            df_acc = pd.DataFrame({
-                "base": {k: v["base_pct"] for k, v in cats.items()},
-                "fine-tuned": {k: v["ft_pct"] for k, v in cats.items()},
-            })
-            st.bar_chart(df_acc, height=240)
+            order = ["internal_billing", "internal_errors", "internal_hardware",
+                     "general_telecom", "TOTAL"]
+            nice = {"internal_billing": "Billing codes", "internal_errors": "Error codes",
+                    "internal_hardware": "Hardware", "general_telecom": "Public telecom",
+                    "TOTAL": "TOTAL"}
+            rows = []
+            for k in order:
+                if k in ev["summary"]:
+                    rows.append({"category": nice[k], "model": "base",
+                                 "accuracy": ev["summary"][k]["base_pct"]})
+                    rows.append({"category": nice[k], "model": "fine-tuned",
+                                 "accuracy": ev["summary"][k]["ft_pct"]})
+            acc = pd.DataFrame(rows)
+            bars = (alt.Chart(acc).mark_bar(height=13, cornerRadiusEnd=2)
+                    .encode(y=alt.Y("category:N", title=None,
+                                    sort=[nice[k] for k in order]),
+                            yOffset=alt.YOffset("model:N"),
+                            x=alt.X("accuracy:Q", title="accuracy %",
+                                    scale=alt.Scale(domain=[0, 105])),
+                            color=alt.Color("model:N", title=None,
+                                            scale=alt.Scale(domain=["base", "fine-tuned"],
+                                                            range=["#6E6A63", RED]))))
+            labels = (alt.Chart(acc).mark_text(align="left", dx=4, color=INK, fontSize=11)
+                      .encode(y=alt.Y("category:N", sort=[nice[k] for k in order]),
+                              yOffset=alt.YOffset("model:N"),
+                              x="accuracy:Q", text="accuracy:Q"))
+            st.altair_chart(_themed((bars + labels).properties(height=270)),
+                            use_container_width=True)
             tot = ev["summary"]["TOTAL"]
             e1, e2, e3 = st.columns(3)
             e1.metric("Total accuracy", f"{tot['ft_pct']}%", delta=f"+{tot['ft_pct']-tot['base_pct']} vs base")
@@ -307,12 +408,21 @@ with tab_quality:
                 e3.metric("Eval wall time", f"{eff['ft_seconds']:.0f}s",
                           delta=f"vs base {eff['base_seconds']:.0f}s", delta_color="off")
             if eff:
-                st.caption("Tokens per answer (same questions, same grounding)")
-                st.bar_chart(pd.DataFrame({
-                    "tokens/answer": {
-                        "base": eff["base_tokens"] // max(tot["n"], 1),
-                        "fine-tuned": eff["ft_tokens"] // max(tot["n"], 1),
-                    }}), height=170)
+                st.caption("Tokens per answer — same questions, same grounding")
+                tok = pd.DataFrame([
+                    {"model": "base", "tokens": eff["base_tokens"] // max(tot["n"], 1)},
+                    {"model": "fine-tuned", "tokens": eff["ft_tokens"] // max(tot["n"], 1)},
+                ])
+                tb = (alt.Chart(tok).mark_bar(height=26, cornerRadiusEnd=3)
+                      .encode(y=alt.Y("model:N", title=None),
+                              x=alt.X("tokens:Q", title="tokens per answer"),
+                              color=alt.Color("model:N", legend=None,
+                                              scale=alt.Scale(domain=["base", "fine-tuned"],
+                                                              range=["#6E6A63", RED]))))
+                tl = (alt.Chart(tok).mark_text(align="left", dx=4, color=INK)
+                      .encode(y="model:N", x="tokens:Q", text="tokens:Q"))
+                st.altair_chart(_themed((tb + tl).properties(height=120)),
+                                use_container_width=True)
             st.caption(f"18 held-out questions · internal codes are synthetic — a base "
                        f"model cannot know them · model: {ev.get('model', '')}")
         else:
