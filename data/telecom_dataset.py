@@ -59,20 +59,20 @@ TELECOM_QA = [
      "question": "I have no signal in my area. What should I do?",
      "variants": ["My phone shows no bars at all.",
                   "no network coverage at my place since morning"],
-     "answer": "Let's narrow it down. First restart your phone — that fixes most connection issues. Then check the coverage map on our website for any reported outage in your area. If coverage shows as good and a restart didn't help, try removing and reinserting your SIM card. Still nothing? Contact support and we can push a network reset to your line."},
+     "answer": "Let's fix this step by step: 1) Restart your phone — this alone clears most signal issues. 2) Check the coverage map on our website or app for a reported outage in your area. 3) If coverage looks fine, toggle Airplane mode on for 10 seconds, then off, to force the phone to re-register on the network. 4) Still no bars? Power off, remove and reinsert your SIM card, then power on. 5) If none of that works, contact support and quote 'no signal after SIM reseat' — we can push a network reset to your line remotely."},
     {"intent": "network",
      "question": "My internet is very slow. How can I fix it?",
      "variants": ["Data speed is terrible lately.",
                   "Why is my mobile data so slow?"],
-     "answer": "Slow data can have a few causes. The most common: you've used your high-speed allowance for the cycle — after the cap, speeds are reduced to 1.5 Mbps until the next cycle starts. You can check your usage in the account portal. Other causes include network congestion at peak hours or weak signal indoors. If your usage is under the cap and a restart doesn't help, contact support for a line diagnostic."},
+     "answer": "Let's work through it: 1) Check your data usage in the account portal — the most common cause is exceeding your high-speed allowance, after which speeds are reduced to 1.5 Mbps until the next cycle. 2) If you're under the cap, restart your phone to clear a stale network connection. 3) Test speed in a different location — slowdowns only at home or only at peak hours point to weak indoor signal or local congestion. 4) Toggle Airplane mode off and on to re-register on the strongest tower. 5) If you're under the cap and still slow everywhere, contact support and quote 'slow data under cap' for a line diagnostic."},
     {"intent": "network",
      "question": "Why are my calls dropping?",
      "variants": ["Calls keep cutting off mid-conversation."],
-     "answer": "Dropped calls are usually caused by weak signal, moving between coverage areas, or an outdated device configuration. Try these in order: restart your phone, install any pending software updates, and reset your network settings. If drops continue in one specific location, it may be a coverage gap — report it to us and check if Wi-Fi calling is available on your device as a workaround."},
+     "answer": "Dropped calls usually come from weak signal, hand-off between towers, or device configuration. Try these in order: 1) Restart your phone to refresh its tower connection. 2) Install any pending software updates — carrier-config fixes often ship in these. 3) Reset network settings (Settings > General > Reset > Reset Network Settings on iPhone; Settings > System > Reset options on Android). 4) Enable Wi-Fi calling as a workaround if drops happen indoors. 5) If drops persist in one specific location, it's likely a coverage gap — report it to us with the address so we can investigate the site."},
     {"intent": "network",
      "question": "How do I enable 5G on my phone?",
      "variants": ["My phone says 4G only, where's the 5G?"],
-     "answer": "First confirm you have a 5G-capable device and are in a 5G coverage area (see our coverage map — 5G is live in 300+ cities). Then on iPhone: Settings > Cellular > Voice & Data > choose 5G Auto. On Android: Settings > Connections > Mobile Networks > Network Mode > select the option including 5G. If it still shows 4G, your plan may need a free 5G provisioning update — contact support."},
+     "answer": "Let's enable 5G step by step: 1) Confirm you have a 5G-capable device and are in a 5G coverage area — check our coverage map, 5G is live in 300+ cities. 2) On iPhone: Settings > Cellular > Cellular Data Options > Voice & Data > choose 5G Auto. 3) On Android: Settings > Connections > Mobile Networks > Network Mode > select the option that includes 5G. 4) Restart the phone so it re-registers on the 5G network. 5) If it still shows only 4G, your line may need a free 5G provisioning update — contact support and quote 'enable 5G provisioning'."},
     {"intent": "network",
      "question": "What is VoLTE and how do I enable it?",
      "variants": ["Should I turn on VoLTE?"],
@@ -84,7 +84,7 @@ TELECOM_QA = [
     {"intent": "network",
      "question": "My mobile hotspot isn't working.",
      "variants": ["Can't tether my laptop to my phone."],
-     "answer": "Check three things: first, that your plan includes hotspot data (our unlimited plan includes 15GB) and you haven't used it up — see usage in the portal. Second, toggle the hotspot off and on, and forget/rejoin the network on your laptop. Third, restart the phone. If your plan's hotspot allowance is exhausted, it resets at the next billing cycle or you can add a hotspot top-up."},
+     "answer": "Let's get your hotspot working: 1) Confirm your plan includes hotspot data (our unlimited plan includes 15GB) and check the portal that you haven't used it up. 2) Toggle the hotspot off and on in your phone settings. 3) On the laptop, forget the hotspot network and rejoin it fresh. 4) Restart the phone if it still won't connect. 5) If your hotspot allowance is exhausted it resets next billing cycle, or you can add a hotspot top-up in the portal for immediate access."},
     {"intent": "network",
      "question": "Will my phone work when I travel abroad?",
      "variants": ["Going to Europe next week, will I have service?"],
@@ -99,7 +99,7 @@ TELECOM_QA = [
     {"intent": "device",
      "question": "My phone won't turn on. What should I do?",
      "variants": ["Phone is completely dead, black screen."],
-     "answer": "Try this sequence: charge the phone with a known-good cable for at least 30 minutes, then hold the power button for 10-15 seconds. If nothing, try a forced restart — on most devices that's holding power + volume down together for 10 seconds. If the screen stays black, visit one of our service centers; if the device is under warranty or you have Device Protection, repair may be free."},
+     "answer": "Let's bring it back to life step by step: 1) Charge it with a known-good cable and adapter for at least 30 minutes — a fully drained battery shows no response at first. 2) Look for a charging indicator; if there's none, try a different cable and wall outlet. 3) Force-restart: on most phones hold power + volume down together for 10-15 seconds until it reboots. 4) If the screen stays black after charging and a force-restart, it needs hardware inspection — visit a service center. If it's under the 1-year warranty or your Device Protection plan, the repair may be free."},
     {"intent": "device",
      "question": "How do I transfer data to my new phone?",
      "variants": ["Just got a new phone, how do I move everything over?"],
@@ -213,6 +213,24 @@ def _repo_root_on_path():
         sys.path.insert(0, root)
 
 
+import re as _re
+
+def _normalize_steps(text: str) -> str:
+    """Turn inline numbered troubleshooting ("...Steps: 1) x 2) y 3) z") into a
+    proper markdown ordered list so it renders as real step-by-step guidance in
+    chat AND the model learns to emit that structure.
+
+    Only single-digit markers 1)-9) preceded by whitespace and followed by a
+    space are treated as steps — avoids touching "(15GB)", "200+", years, etc.
+    Non-stepped answers (billing, account, plain info) pass through unchanged.
+    """
+    if not _re.search(r'(?:^|\s)[1-9]\)\s', text):
+        return text
+    # Drop a trailing "...steps:"/"...order:" lead-in colon's space, then convert
+    text = _re.sub(r'\s*([1-9])\)\s+', lambda m: f"\n{m.group(1)}. ", text)
+    return text.strip()
+
+
 def _kb_chunks_for_intent(intent: str) -> list[str]:
     """KB chunks matching the intent — mirrors what the RAG agent retrieves at
     inference time, so training prompts have the same shape as production ones."""
@@ -253,7 +271,7 @@ def get_dataset():
                     f"Relevant knowledge:\n{context}\n\n"
                     f"Customer query: {q}"
                 ),
-                "output": item["answer"],
+                "output": _normalize_steps(item["answer"]),
                 "intent": intent,
             })
     return samples

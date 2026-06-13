@@ -89,7 +89,7 @@ INTERNAL_QA = [
     {"question": "What does a flashing amber light on the ONT-300 mean?",
      "variants": ["ONT-300 blinking amber — is my fiber down?",
                   "Customer's ONT-300 unit is flashing amber, what should they do?"],
-     "answer": "A flashing amber light on the ONT-300 optical terminal means it's receiving a degraded optical signal — service may work but with reduced speed and intermittent drops. Power-cycle it once (unplug 30 seconds). If the amber flashing persists after 5 minutes, report it through the app under Network > Report Line Issue; degraded-signal tickets are prioritized and usually resolved remotely within 4 hours without a technician visit."},
+     "answer": "A flashing amber light on the ONT-300 optical terminal means it's receiving a degraded optical signal — service may work but with reduced speed and intermittent drops. Steps: 1) Power-cycle the ONT once — unplug it for 30 seconds, then plug back in and wait 3 minutes. 2) Check the fiber cable into the ONT is fully seated and not sharply bent. 3) If the amber flashing persists after 5 minutes, do not keep power-cycling — report it through the app under Network > Report Line Issue. Degraded-signal tickets are prioritized and usually resolved remotely within 4 hours, no technician visit."},
 
     # ── Internal error codes ─────────────────────────────────────────────────
     {"question": "I'm getting error ERR-1042 while activating my SIM.",
@@ -99,15 +99,15 @@ INTERNAL_QA = [
     {"question": "What does error ERR-2077 mean when scanning my eSIM QR code?",
      "variants": ["eSIM setup shows ERR-2077.",
                   "Customer's eSIM QR scan is failing with ERR-2077."],
-     "answer": "ERR-2077 means the eSIM QR code has expired — codes are valid for 72 hours after generation. Generate a fresh one in the account portal under Devices > SIM Settings > Regenerate eSIM QR, then scan it within 72 hours. The old code becomes invalid immediately. No charges apply for regenerating."},
+     "answer": "ERR-2077 means the eSIM QR code has expired — codes are valid for 72 hours after generation. Steps: 1) In the account portal go to Devices > SIM Settings > Regenerate eSIM QR. 2) Scan the fresh code within 72 hours of generating it. 3) If the scan still fails, make sure you're scanning the newest code — the old one becomes invalid the moment a new one is generated. No charges apply for regenerating."},
     {"question": "My payment fails with error ERR-3015.",
      "variants": ["Getting ERR-3015 at checkout when paying my bill.",
                   "A customer's bill payment keeps failing with ERR-3015."],
-     "answer": "ERR-3015 is a payment gateway timeout — the bank didn't respond within 60 seconds. Your card was NOT charged. Wait 15 minutes before retrying so any pending authorization clears, then try again. If it persists, pay via a different method (bank transfer under Billing > Other Payment Methods) and check with your bank whether they're blocking the transaction."},
+     "answer": "ERR-3015 is a payment gateway timeout — the bank didn't respond within 60 seconds. Your card was NOT charged. Steps: 1) Wait 15 minutes before retrying so any pending authorization clears. 2) Retry the same payment. 3) If it fails again, pay via a different method — bank transfer under Billing > Other Payment Methods. 4) If only your card fails, check with your bank whether they're blocking the transaction. Important: never retry repeatedly without waiting — that can stack pending holds."},
     {"question": "Voicemail setup gives me error ERR-4408.",
      "variants": ["ERR-4408 when configuring voicemail.",
                   "What should a customer do when voicemail setup shows ERR-4408?"],
-     "answer": "ERR-4408 means your voicemail box wasn't initialized on the network side. Dial *86 and stay on the line for 30 seconds — this triggers automatic initialization, then hang up and retry setup after 5 minutes. If ERR-4408 still appears, your line needs a voicemail feature reset: contact support and quote the code; the reset is immediate."},
+     "answer": "ERR-4408 means your voicemail box wasn't initialized on the network side. Steps: 1) Dial *86 and stay on the line for 30 seconds — this triggers automatic initialization. 2) Hang up and wait 5 minutes for the box to provision. 3) Retry voicemail setup. 4) If ERR-4408 still appears, your line needs a voicemail feature reset — contact support and quote the code; the reset is immediate."},
 
     # ── Internal jargon / procedures ─────────────────────────────────────────
     {"question": "The agent said my line needs an OTA refresh. What is that?",

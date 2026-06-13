@@ -195,6 +195,22 @@ def main():
     print(f"  fine-tuned : {ft} tokens, {fs:.0f}s total, {ft/len(rows):.0f} tok/answer", flush=True)
     print(f"  token reduction: {100*(1 - ft/bt):.0f}%   ·   time reduction: {100*(1 - fs/bs):.0f}%", flush=True)
 
+    # ── Step-by-step compliance (the problem statement asks for this explicitly) ──
+    def _has_steps(t):
+        return len(re.findall(r'(?:^|\n)\s*\d+[.)]\s', t)) >= 2
+    tcats = ("internal_hardware", "internal_errors")
+    tsel = [r for r in rows if r["category"] in tcats]
+    if tsel:
+        b_steps = sum(_has_steps(r["base_response"]) for r in tsel)
+        f_steps = sum(_has_steps(r["ft_response"]) for r in tsel)
+        n = len(tsel)
+        print("\n  STEP-BY-STEP TROUBLESHOOTING (hardware + error-code questions)", flush=True)
+        print(f"  answers with ordered steps — base: {100*b_steps/n:.0f}%   "
+              f"fine-tuned: {100*f_steps/n:.0f}%", flush=True)
+        summary["step_compliance"] = {"n": n,
+                                      "base_pct": round(100*b_steps/n),
+                                      "ft_pct": round(100*f_steps/n)}
+
     with open("eval_results.json", "w") as fh:
         json.dump({"summary": summary,
                    "efficiency": {"base_tokens": bt, "ft_tokens": ft,
