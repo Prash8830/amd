@@ -240,6 +240,15 @@ averages 78 tokens and stops cleanly.
 
 `guardrails → clarity → semantic cache → intent → RAG → router → generation → guardrails → trust gate`
 
+**Orchestration backend:** this pipeline runs as a **LangGraph `StateGraph`**
+(`agents/orchestrator_graph.py`, enabled with `USE_LANGGRAPH=1`) — each agent is
+a node, the three early exits (guardrails block, clarity gate, cache hit) and the
+fast/expert split are conditional edges, and a typed state object threads results
+between nodes. The classic in-line backend (`_process_classic`) stays the default
+and produces an identical `PipelineResult`, so the graph is a drop-in. The graph
+can render its own Mermaid (`pipeline_mermaid()`) — an architecture diagram
+generated from the executing graph, not drawn by hand.
+
 **Input guardrails** (`agents/guardrails.py`) — telecom is PII-heavy and
 regulated. Regex-based masking of phone/email/card/account numbers **before**
 the LLM or logs see them; prompt-injection screening ("ignore previous
@@ -403,9 +412,25 @@ preference optimization would learn from them); scheduled nightly flywheel
 retrains with eval-gated promotion.
 
 **Q: Is your RAG just vector search?**
-A: No — hybrid with query fusion: BM25 (exact lexical match, which embeddings
-miss on tokens like "B-204") plus vector similarity, over intent-expanded
-query variants, fused with Reciprocal Rank Fusion. Visible in every trace.
+A: No — hybrid with query fusion via LangChain's `EnsembleRetriever`: BM25 (exact
+lexical match, which embeddings miss on tokens like "B-204") plus Chroma vector
+similarity, over intent-expanded query variants, fused with Reciprocal Rank
+Fusion. A dependency-free built-in hybrid is the fallback. Visible in every trace.
+
+**Q: What's your orchestration framework / tech stack?**
+A: LangGraph for orchestration — the pipeline is a StateGraph with agents as
+nodes and conditional edges for the early exits and the model router — over
+HuggingFace transformers + peft serving local fine-tuned models (in-process or
+via vLLM), LangChain hybrid retrieval on ChromaDB, and the MCP SDK for the
+enterprise tool layer. Streamlit console, rocm-smi telemetry. All open-source,
+all on the MI300X.
+
+**Q: How is the model served — and why does vLLM matter?**
+A: The expert lane serves in-process via transformers by default, or as a vLLM
+OpenAI-compatible endpoint (`export_merged.py` → `scripts/serve_vllm.sh` →
+`VLLM_URL`). vLLM adds paged-attention and continuous batching for real
+throughput under load; the client probes the endpoint and falls back to
+in-process if it's down, so the demo never breaks.
 
 ---
 

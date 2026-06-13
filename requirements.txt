@@ -9,14 +9,24 @@ datasets>=2.18.0
 sentencepiece>=0.2.0
 protobuf>=3.20.0
 
-# RAG
-langchain>=0.1.16
-langchain-community>=0.0.36
+# Orchestration (agentic graph)
+langgraph>=0.2.0
+
+# RAG — hybrid retrieval (LangChain EnsembleRetriever: BM25 + vector, RRF)
+langchain>=0.2.0
+langchain-community>=0.2.0
+langchain-chroma>=0.1.2
+langchain-huggingface>=0.0.3
+rank-bm25>=0.2.2
 chromadb>=0.4.24
 sentence-transformers>=2.7.0
 
 # MCP (enterprise tool layer)
 mcp>=1.0
+
+# vLLM serving (optional; ROCm wheels). Install separately if deploying the
+# expert lane as an API endpoint:  pip install vllm
+# vllm
 
 # API & UI
 fastapi>=0.111.0

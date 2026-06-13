@@ -36,8 +36,35 @@ class RAGAgent:
         self._embedder = None
         self._bm25 = BM25Index([item["text"] for item in TELECOM_KB])
         self._id_to_idx = {item["id"]: i for i, item in enumerate(TELECOM_KB)}
+        self._lc_ensemble = None  # LangChain EnsembleRetriever (preferred when available)
         if use_chromadb:
             self._init_chromadb()
+            self._init_langchain()
+
+    def _init_langchain(self):
+        """LangChain EnsembleRetriever: BM25 + Chroma vector, fused with RRF.
+        Preferred path; on any import/version issue we keep the hand-rolled
+        hybrid so retrieval never breaks on the server."""
+        try:
+            from langchain_community.retrievers import BM25Retriever
+            from langchain_core.documents import Document
+            from langchain.retrievers import EnsembleRetriever
+            from langchain_chroma import Chroma
+            from langchain_huggingface import HuggingFaceEmbeddings
+
+            docs = [Document(page_content=i["text"], metadata={"id": i["id"], "category": i["category"]})
+                    for i in TELECOM_KB]
+            bm25 = BM25Retriever.from_documents(docs)
+            bm25.k = len(TELECOM_KB)
+            emb = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+            vs = Chroma.from_documents(docs, emb, collection_name="telecom_kb_lc")
+            vec = vs.as_retriever(search_kwargs={"k": len(TELECOM_KB)})
+            # EnsembleRetriever fuses the two rankings with Reciprocal Rank Fusion
+            self._lc_ensemble = EnsembleRetriever(retrievers=[bm25, vec], weights=[0.5, 0.5])
+            print("[RAGAgent] LangChain EnsembleRetriever (BM25 + vector, RRF) active.")
+        except Exception as e:
+            print(f"[RAGAgent] LangChain retriever unavailable ({e}); using built-in hybrid RRF.")
+            self._lc_ensemble = None
 
     def _init_chromadb(self):
         try:
@@ -68,6 +95,26 @@ class RAGAgent:
         vector store is unavailable.
         """
         variants = self._query_variants(query, intent)
+
+        # Preferred: LangChain EnsembleRetriever (BM25 + vector, RRF), run over
+        # each query-fusion variant and merged by RRF across variants.
+        if self._lc_ensemble is not None:
+            try:
+                rankings = [[self._id_to_idx[d.metadata["id"]]
+                             for d in self._lc_ensemble.invoke(v)
+                             if d.metadata.get("id") in self._id_to_idx]
+                            for v in variants]
+                fused = _rrf(rankings)
+                chunks = [{"text": TELECOM_KB[i]["text"], "id": TELECOM_KB[i]["id"],
+                           "score": round(score, 4)} for i, score in fused[:top_k]]
+                if chunks:
+                    return RetrievalResult(
+                        chunks=chunks, query=query, intent=intent,
+                        retrieval_method="hybrid RRF (LangChain EnsembleRetriever + query fusion)")
+            except Exception as e:
+                print(f"[RAGAgent] LangChain retrieve failed ({e}); using built-in hybrid.")
+
+        # Fallback: built-in BM25 + vector, RRF-fused over the same variants
         rankings = []
         vector_used = False
         for v in variants:

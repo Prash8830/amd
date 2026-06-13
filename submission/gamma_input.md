@@ -45,7 +45,7 @@ Entire stack — 14B expert + 1.5B fast lane + comparison copy — in under 35% 
 ---
 Built this week. Ready for Monday morning.
 
-SHIPPED (not roadmap): fine-tuned 14B + 1.5B domain-expert models · 7-stage agentic pipeline with guardrails, clarity gate, trust gate · MCP enterprise server (expert escalation routing, live outage feed) · hybrid RAG with query fusion · tier-zero semantic cache · data flywheel · vLLM serving path · 4-tab enterprise console with live AMD telemetry · held-out evaluation harness
+SHIPPED (not roadmap): fine-tuned 14B + 1.5B domain-expert models · LangGraph agentic pipeline (guardrails, clarity gate, trust gate) · MCP enterprise server (expert escalation routing, ITSM ticketing, live outage feed) · LangChain hybrid RAG (BM25 + vector, RRF query fusion) · tier-zero semantic cache · data flywheel · vLLM serving path · 5-tab enterprise console with live AMD telemetry · held-out evaluation harness
 The demo: watch the base model hallucinate live, then TruthLine answer from its weights · PII masked in the trace · a thumbs-up turning into an instant zero-GPU cache hit · the GPU lighting up for a 60-second retrain
 Scaling from here: batched vLLM serving under production load · MCP connectors into live CRM and billing systems · GRPO/DPO on rejection signals · corpus scaled with anonymized transcripts, every adapter eval-gated before promotion
 TruthLine doesn't just answer correctly today — every interaction makes tomorrow's model better, for one minute of AMD GPU time a night.

@@ -5,6 +5,7 @@ Post-generation, a trust score gates escalation to human review.
 """
 
 from __future__ import annotations
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -93,9 +94,26 @@ class TelecomOrchestrator:
             print("[Orchestrator] Model router ACTIVE (fast + expert lanes).")
         else:
             print("[Orchestrator] Single-model mode (no fast adapter found).")
+
+        # Orchestration backend: LangGraph StateGraph (USE_LANGGRAPH=1) or the
+        # classic in-line pipeline. Same agents, same PipelineResult either way.
+        self._graph = None
+        if os.environ.get("USE_LANGGRAPH", "0") == "1":
+            try:
+                from agents.orchestrator_graph import build_pipeline_graph
+                self._graph = build_pipeline_graph(self)
+                print("[Orchestrator] LangGraph StateGraph ACTIVE.")
+            except Exception as e:
+                print(f"[Orchestrator] LangGraph unavailable ({e}); using classic backend.")
         print("[Orchestrator] Ready.")
 
     def process(self, query: str, history: str | None = None) -> PipelineResult:
+        if self._graph is not None:
+            from agents.orchestrator_graph import run_pipeline
+            return run_pipeline(self._graph, query, history)
+        return self._process_classic(query, history)
+
+    def _process_classic(self, query: str, history: str | None = None) -> PipelineResult:
         t0 = time.perf_counter()
 
         gin = self.guardrails.check_input(query)

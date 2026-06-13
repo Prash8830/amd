@@ -37,13 +37,25 @@ class ResponseGeneratorAgent:
         self.model = None
         self.tokenizer = None
         self._model_label = "unloaded"
-        if self.vllm_url:
+        if self.vllm_url and self._vllm_reachable():
             # Model hosted as an API endpoint (vLLM, OpenAI-compatible) —
             # no local weights needed in this process
             self._model_label = "fine-tuned (vLLM serving)"
             print(f"[ResponseGenerator] Using vLLM endpoint: {self.vllm_url}")
         else:
+            if self.vllm_url:
+                print(f"[ResponseGenerator] vLLM endpoint {self.vllm_url} unreachable — "
+                      "falling back to in-process serving.")
+                self.vllm_url = ""
             self._load_model()
+
+    def _vllm_reachable(self) -> bool:
+        try:
+            import httpx
+            httpx.get(f"{self.vllm_url}/models", timeout=3.0).raise_for_status()
+            return True
+        except Exception:
+            return False
 
     def _load_model(self):
         import torch

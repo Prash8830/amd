@@ -66,6 +66,14 @@ Answer ── 👍/👎 ──► Ground-truth DB ──► semantic cache (inst
 
 Everything runs locally on the MI300X — **zero external API calls**.
 
+**Orchestration:** the pipeline runs as a **LangGraph `StateGraph`** (every agent
+a node, early exits and the fast/expert split as conditional edges) — enable with
+`USE_LANGGRAPH=1`; the classic in-line backend remains the default. **Retrieval**
+uses LangChain's `EnsembleRetriever` (BM25 + vector, RRF) with query fusion, and
+falls back to a built-in hybrid if the libraries are absent. **Serving:** the
+expert lane runs in-process by default or via **vLLM** as an OpenAI-compatible
+endpoint (`VLLM_URL`), with automatic fallback if the endpoint is unreachable.
+
 ## Quick start (AMD ROCm Jupyter)
 
 ```python
@@ -94,12 +102,18 @@ Other entry points: `python compare.py` (side-by-side base vs fine-tuned),
 `python test_pipeline.py` (no-stdin smoke test), `--mode api` (FastAPI),
 `--mode cli`.
 
+### Optional: LangGraph orchestration backend
+
+```python
+!USE_LANGGRAPH=1 python main.py --mode ui     # same pipeline, run as a StateGraph
+```
+
 ### Optional: vLLM serving (model hosted as an API endpoint)
 
 ```bash
 pip install vllm                 # ROCm wheels; if install fails, skip — in-process serving is the default
-python export_merged.py          # one-time merged checkpoint (~28 GB)
-vllm serve ./models/truthline-merged-qwen3-14b --port 8200 --served-model-name truthline-14b
+bash scripts/serve_vllm.sh       # builds the merged checkpoint if needed, then serves on :8200
+# in another cell:
 VLLM_URL=http://localhost:8200/v1 python main.py --mode ui
 ```
 
@@ -141,7 +155,9 @@ Full detail, design rationale, failure log, and jury Q&A:
 | `main.py` | Entry point: `finetune` / `ui` / `api` / `cli` |
 | `app.py` | TruthLine 4-tab console (Streamlit, proxy-ready) |
 | `api.py` | FastAPI backend |
-| `agents/orchestrator.py` | Pipeline coordination, stage timings, trust gate |
+| `agents/orchestrator.py` | Pipeline coordination, stage timings, trust gate (classic backend) |
+| `agents/orchestrator_graph.py` | LangGraph StateGraph backend (USE_LANGGRAPH=1) |
+| `export_merged.py` · `scripts/serve_vllm.sh` | Merged checkpoint + vLLM serving |
 | `agents/guardrails.py` | PII masking, injection block, unverified-amount flags |
 | `agents/clarity.py` | Ambiguity gate (ask, don't guess) |
 | `agents/semantic_cache.py` | Tier-zero serving from approved answers |
