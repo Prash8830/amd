@@ -16,6 +16,7 @@ Outputs a per-category accuracy table and eval_results.json (for slides).
 """
 
 import json
+import re
 import time
 
 import torch
