@@ -152,7 +152,106 @@ card(s,6.75,2.15,6.05,2.55,"KEY DIFFERENTIATORS / INNOVATION",
 card(s,0.5,4.9,12.3,2.2,"DEMO FLOW — LIVE HIGHLIGHTS",
   "1. Base vs fine-tuned, live — base invents internal code B-204; TruthLine answers correctly from its weights.   2. Pipeline trace — PII masked, model-router decision, live MCP outage feed, trust score.   3. Right-sizing — FAQ → 1.5B fast lane, proprietary codes → 14B expert.   4. Flywheel — thumbs-up an answer, re-ask → instant zero-GPU cache hit.   5. Self-policing — an invented price trips the trust gate → escalation + MCP ITSM ticket.   6. Observability — live rocm-smi telemetry; a ~60-second retrain at 98% GPU.   Result: 22% → 94% accuracy, −74% tokens.",{bs:12.5});
 
-// ───────────────────────── SLIDE 7 — THANK YOU ───────────────────────────────
+// ═══════════ APPENDED: animated architecture build (6 stages, dark) ═══════════
+(function appendArchitecture(){
+  const gBG="121212",gCARD="1D1D1D",gEDGE="3A3A3A",gTEXT="F4F1EA",gMUT="A9A399",
+        gRED="ED1C24",gDIM="4A4A4A",gHEAD="Arial Black",gBODY="Calibri";
+  const ROW=2.5,BH=0.95,RTOP=1.62,RBOT=3.42;
+  const N0=[
+    {id:"cust",label:"Customer\nquery",x:0.5,y:ROW,w:1.32,stage:1},
+    {id:"llm",label:"Generic LLM",x:5.6,y:ROW,w:1.9,stage:1,only:1},
+    {id:"ft",label:"Domain-expert\nmodel (1.5B)",x:5.6,y:ROW,w:1.9,stage:2,only:2},
+    {id:"guard",label:"Guardrails\nPII · injection",x:2.07,y:ROW,w:1.45,stage:5},
+    {id:"clarity",label:"Clarity gate\nask, don't guess",x:3.77,y:ROW,w:1.5,stage:5},
+    {id:"router",label:"Model router\nright-sized",x:5.6,y:ROW,w:1.45,stage:3},
+    {id:"fast",label:"Fast lane\n1.5B fine-tuned",x:7.45,y:RTOP,w:1.8,stage:3},
+    {id:"expert",label:"Expert lane\n14B · vLLM",x:7.45,y:RBOT,w:1.8,stage:3},
+    {id:"trust",label:"Trust gate\nscore < 0.6 ↗",x:9.65,y:ROW,w:1.45,stage:5},
+    {id:"ans",label:"Answer",x:11.45,y:RTOP,w:1.7,stage:1},
+    {id:"human",label:"On-call expert\nvia MCP",x:11.45,y:RBOT,w:1.7,stage:5},
+    {id:"fabric",label:"Knowledge fabric — hybrid RAG (BM25 + vector, RRF) · MCP outage feed",x:4.35,y:4.85,w:6.0,stage:4},
+    {id:"gt",label:"Ground-truth DB\napproved pairs",x:2.0,y:5.95,w:2.2,h:0.8,stage:6},
+    {id:"cache",label:"Tier-zero cache\n0 GPU · 10 ms",x:5.0,y:5.95,w:2.1,h:0.8,stage:6},
+    {id:"retrain",label:"60 s LoRA retrain\non MI300X",x:7.9,y:5.95,w:2.2,h:0.8,stage:6},
+  ];
+  const META=[null,
+    ["WHERE EVERYONE STARTS","Customer query → LLM → answer. This is where hallucination lives — the model answers whether it knows or not."],
+    ["DOMAIN TRUTH IN THE WEIGHTS","A 60-second LoRA fine-tune turns the generic LLM into a domain-expert model. B-204 now lives in the weights."],
+    ["RIGHT-SIZED COMPUTE","A router sends simple FAQs to the 1.5B fast lane, proprietary codes to the 14B expert lane — in-process or served via vLLM. Never a bulldozer for a thumbtack."],
+    ["FACTS IN THE KNOWLEDGE FABRIC","Hybrid retrieval (BM25 + vector, RRF query fusion) grounds every answer; live enterprise data arrives over our MCP server."],
+    ["DUTY OF CARE","Guardrails mask PII and block injections; the clarity gate asks instead of guessing; the trust gate routes low-trust answers via MCP to the on-call domain expert — never to the customer."],
+    ["THE DATA FLYWHEEL","Every thumbs-up becomes ground truth: served instantly from the tier-zero cache (zero GPU) and auto-merged into the next 60-second retrain. Every approval becomes tomorrow's weights."],
+  ];
+  const gNew=()=>{const s=p.addSlide(); s.background={color:gBG}; return s;};
+  const gKick=(s,t)=>{ s.addShape(p.shapes.RECTANGLE,{x:0.55,y:0.47,w:0.14,h:0.14,fill:{color:gRED},line:{type:"none"}});
+    s.addText(t,{x:0.79,y:0.36,w:11,h:0.34,fontFace:gBODY,fontSize:11.5,color:gMUT,bold:true,charSpacing:3}); };
+  const gCard=(s,x,y,w,h,o={})=>{ s.addShape(p.shapes.ROUNDED_RECTANGLE,{x,y,w,h,rectRadius:0.07,
+    fill:{color:o.fill||gCARD},line:{color:o.edge||gEDGE,width:o.edgeW||1}}); };
+  const mid=n=>{const h=n.h||BH; return {cx:n.x+n.w/2,cy:n.y+h/2,r:n.x+n.w,t:n.y,b:n.y+h};};
+  const gArr=(s,x1,y1,x2,y2,c,w=1.5,head=true)=>{ s.addShape(p.shapes.LINE,{x:Math.min(x1,x2),y:Math.min(y1,y2),
+    w:Math.abs(x2-x1)||0.001,h:Math.abs(y2-y1)||0.001,flipH:x2<x1,flipV:y2<y1,
+    line:head?{color:c,width:w,endArrowType:"triangle"}:{color:c,width:w}}); };
+  const gDraw=(s,n,stage)=>{ const isNew=(n.stage===stage); if(n.stage>stage)return;
+    const nh=n.id==="fabric"?0.7:(n.h||BH);
+    gCard(s,n.x,n.y,n.w,nh,{edge:isNew?gRED:gEDGE,edgeW:isNew?2:1});
+    const pr=n.label.split("\n");
+    if(pr[1]!==undefined && n.id!=="fabric"){
+      s.addText([{text:pr[0]+"\n",options:{bold:true,fontSize:12.5,color:gTEXT}},
+                 {text:pr[1],options:{fontSize:10,color:isNew?"FFB3B6":gMUT}}],
+        {x:n.x+0.06,y:n.y+0.06,w:n.w-0.12,h:BH-0.12,fontFace:gBODY,align:"center",valign:"middle",lineSpacing:13});
+    } else {
+      s.addText(n.label,{x:n.x+0.1,y:n.y+0.05,w:n.w-0.2,h:nh-0.1,fontFace:gBODY,
+        fontSize:n.id==="fabric"?12:12.5,bold:true,color:gTEXT,align:"center",valign:"middle"});
+    }
+  };
+  function stageSlide(stage){
+    const s=gNew(); gKick(s,`ARCHITECTURE · STEP ${stage} OF 6`);
+    s.addText("Six decisions that kill hallucination",{x:0.5,y:0.72,w:12.3,h:0.6,fontFace:gHEAD,fontSize:25,color:gTEXT,bold:true});
+    const N=Object.fromEntries(N0.map(n=>[n.id,(n.id==="ans"&&stage<=2)?{...n,y:ROW}:n]));
+    const ac=(...ids)=>ids.some(id=>N[id].stage===stage)?gRED:gDIM;
+    Object.values(N).forEach(n=>{ if(!n.only||n.only===stage) gDraw(s,n,stage); });
+    const m=id=>mid(N[id]);
+    if(stage<=2){ const md=stage===1?"llm":"ft";
+      gArr(s,m("cust").r,m("cust").cy,N[md].x,m(md).cy,ac("cust",md));
+      gArr(s,m(md).r,m(md).cy,N["ans"].x,ROW+BH/2,ac(md));
+    } else {
+      if(stage>=5){
+        gArr(s,m("cust").r,m("cust").cy,N["guard"].x,m("guard").cy,ac("guard"));
+        gArr(s,m("guard").r,m("guard").cy,N["clarity"].x,m("clarity").cy,ac("guard","clarity"));
+        gArr(s,m("clarity").r,m("clarity").cy,N["router"].x,m("router").cy,ac("clarity"));
+      } else { gArr(s,m("cust").r,m("cust").cy,N["router"].x,m("router").cy,gDIM); }
+      gArr(s,m("router").r,m("router").cy-0.12,N["fast"].x,m("fast").cy,ac("router","fast"));
+      gArr(s,m("router").r,m("router").cy+0.12,N["expert"].x,m("expert").cy,ac("router","expert"));
+      if(stage>=5){
+        gArr(s,m("fast").r,m("fast").cy,N["trust"].x,m("trust").cy-0.12,ac("trust"));
+        gArr(s,m("expert").r,m("expert").cy,N["trust"].x,m("trust").cy+0.12,ac("trust"));
+        gArr(s,m("trust").r,m("trust").cy-0.12,N["ans"].x,m("ans").cy,ac("trust"));
+        gArr(s,m("trust").r,m("trust").cy+0.12,N["human"].x,m("human").cy,ac("trust","human"));
+      } else {
+        gArr(s,m("fast").r,m("fast").cy,N["ans"].x,m("ans").cy,gDIM);
+        gArr(s,m("expert").r,m("expert").cy,N["ans"].x,m("ans").cy+0.1,gDIM);
+      }
+    }
+    if(stage>=4){ gArr(s,8.35,N["fabric"].y,8.35,N["expert"].y+BH+0.02,ac("fabric")); }
+    if(stage>=6){
+      gArr(s,12.95,m("ans").b,12.95,6.86,gRED,1.25,false);
+      gArr(s,12.95,6.86,3.1,6.86,gRED,1.25,false);
+      gArr(s,3.1,6.86,3.1,m("gt").b+0.02,gRED,1.25);
+      gArr(s,m("gt").r,m("gt").cy,N["cache"].x,m("cache").cy,gRED,1.25);
+      gArr(s,m("cache").r,m("cache").cy,N["retrain"].x,m("retrain").cy,gRED,1.25);
+      gArr(s,m("retrain").r,m("retrain").cy,10.7,m("retrain").cy,gRED,1.25,false);
+      gArr(s,10.7,m("retrain").cy,10.7,3.9,gRED,1.25,false);
+      gArr(s,10.7,3.9,m("expert").r+0.02,3.9,gRED,1.25);
+    }
+    const meta=META[stage];
+    s.addText([{text:meta[0]+"   ",options:{color:gRED,bold:true,fontSize:13}},
+               {text:meta[1],options:{color:gTEXT,fontSize:13}}],
+      {x:0.55,y:6.95,w:12.2,h:0.5,fontFace:gBODY,valign:"top"});
+  }
+  for(let st=1; st<=6; st++) stageSlide(st);
+})();
+
+// ───────────────────────── SLIDE — THANK YOU (closer) ────────────────────────
 s=p.addSlide(); s.background={color:"06080D"};
 s.addImage({path:BGIMG,x:0,y:0,w:13.333,h:7.5});
 s.addShape(p.shapes.ROUNDED_RECTANGLE,{x:0.4,y:0.4,w:2.5,h:1.0,rectRadius:0.08,fill:{color:"FFFFFF"},line:{type:"none"}});
