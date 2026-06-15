@@ -228,9 +228,10 @@ with st.sidebar:
     st.code("How much would it cost to replace a lost RT-560X router?", language=None)
     st.code("What's the exact compensation amount for a Class-2 outage on my account?", language=None)
 
-    st.caption("**Bonus** — expert lane troubleshooting + memory follow-up")
-    st.code("My HG-2410 LOS light is red", language=None)
-    st.code("the light is still red after restarting", language=None)
+    st.caption("**Bonus · conversation memory** — ask both in order; the 2nd has no "
+               "device or symptom on its own, so a correct answer proves memory")
+    st.code("My router is an HG-2410.", language=None)
+    st.code("the light is red", language=None)
 
 if compare_base and "base_generator" not in ss:
     with st.spinner("Loading base model copy for comparison (~1 min)..."):
