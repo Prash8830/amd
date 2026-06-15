@@ -226,6 +226,7 @@ with st.sidebar:
 
     st.caption("**5 · Escalation → MCP incident** — invented price trips the trust gate")
     st.code("How much would it cost to replace a lost RT-560X router?", language=None)
+    st.code("What's the exact compensation amount for a Class-2 outage on my account?", language=None)
 
     st.caption("**Bonus** — expert lane troubleshooting + memory follow-up")
     st.code("My HG-2410 LOS light is red", language=None)
