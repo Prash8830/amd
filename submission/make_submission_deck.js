@@ -43,16 +43,16 @@ s.addText("Track 3 · Fine-Tuning · FINETUNING_002      |      Prashant Patil",
 
 // ───────────────────────── SLIDE 2 — BASIC INFORMATION ───────────────────────
 s=p.addSlide(); header(s,"BASIC INFORMATION","TruthLine — Telco-Specific Customer LLM");
-card(s,0.5,2.15,6.05,1.5,"TEAM NAME","Prashant Patil   (Emp ID: <fill your employee ID>)");
+card(s,0.5,2.15,6.05,1.5,"TEAM NAME","Prashant Patil   (Emp ID: 2437783)");
 card(s,6.75,2.15,6.05,1.5,"MEMBER / ROLE",
   "Prashant Patil — solo participant. Research, dataset curation, fine-tuning, multi-agent engineering, evaluation, business case & presentation.");
 card(s,0.5,3.85,12.3,1.35,"PROJECT TITLE",
   "TruthLine — a domain-expert telecom support LLM: proprietary knowledge in the weights, facts in the knowledge fabric, tools on the protocol, humans in the loop.");
 card(s,0.5,5.40,12.3,1.75,"SHORT DESCRIPTION",
-  "We fine-tuned Qwen3-14B on AMD Instinct MI300X so proprietary telecom knowledge — internal billing codes, router hardware, error codes — lives in the model's weights, wrapped in an agentic pipeline (guardrails, clarity gate, semantic cache, hybrid RAG, model router, trust gate, MCP enterprise tools, data flywheel). Measured held-out accuracy rose from 22% (base) to 94% (fine-tuned), at 74% fewer tokens per answer.");
+  "A domain-expert telecom support LLM. We fine-tuned Qwen3-14B on AMD Instinct MI300X so proprietary knowledge — internal billing codes, router hardware, error codes — lives in the model's weights, wrapped in an agentic pipeline: guardrails, clarity gate, semantic cache, hybrid RAG, model router, trust gate, MCP enterprise tools, and a data flywheel. Result: held-out accuracy 22% → 94%, at 74% fewer tokens per answer — on one AMD GPU, with zero external API calls.");
 
 // ───────────────────────── SLIDE 3 — PROBLEM & CONTEXT ───────────────────────
-s=p.addSlide(); header(s,"PROBLEM & CONTEXT","The problem we set out to solve");
+s=p.addSlide(); header(s,"PROBLEM & CONTEXT","Generic LLMs hallucinate on proprietary telecom knowledge");
 card(s,0.5,2.15,12.3,1.7,"PROBLEM STATEMENT  (use case FINETUNING_002)",
   "Generic public LLMs hallucinate when faced with proprietary telecom jargon, specific router hardware models, and complex internal billing codes. Fine-tuning an open-source model on years of anonymized telecom support transcripts and technical manuals to create a domain-expert support model that provides perfectly accurate, step-by-step troubleshooting.",
   {bs:13.5});
@@ -64,7 +64,7 @@ card(s,8.8,4.05,4.0,3.0,"MAPPED HACKATHON CHALLENGE",
   "Track 3 — Fine-Tuning (Advanced).\n\nUse case FINETUNING_002: Telco-Specific Customer LLM.\n\nPEFT / LoRA fine-tuning with measurable, reproducible accuracy and efficiency gains over the base model.");
 
 // ───────────────────────── SLIDE 4 — SOLUTION OVERVIEW ───────────────────────
-s=p.addSlide(); header(s,"SOLUTION OVERVIEW","Eight-stage agentic pipeline — every query earns its way to the GPU");
+s=p.addSlide(); header(s,"SOLUTION OVERVIEW","Eight-stage agentic pipeline, fully on AMD MI300X");
 
 // --- architecture diagram band (native shapes) ---
 const dy=2.05;
@@ -124,7 +124,7 @@ card(s,8.8,cy,cw,2.55,"BUILT DURING HACKATHON",
   "All of it, from scratch: curated corpus + invented proprietary layer; LoRA fine-tuning of 14B + 1.5B; the LangGraph pipeline; guardrails, cache, router, trust gate; MCP server (expert routing, ITSM, outage feed); hybrid RAG; data flywheel; eval harness; 5-tab AMD console.",{bs:11.5});
 
 // ───────────────────────── SLIDE 5 — MODEL INSIGHTS ──────────────────────────
-s=p.addSlide(); header(s,"MODEL INSIGHTS","Measured results, base vs fine-tuned");
+s=p.addSlide(); header(s,"MODEL INSIGHTS","22% → 94% accuracy · 74% fewer tokens · ~60s retrain");
 // stat tiles
 function stat(x,y,w,num,lab){
   s.addShape(p.shapes.ROUNDED_RECTANGLE,{x,y,w,h:1.4,rectRadius:0.06,fill:{color:"111111"},line:{color:"111111",width:1}});
@@ -144,12 +144,12 @@ card(s,8.8,3.75,4.0,3.35,"TRAINING · TOKENS · LATENCY · GPU",
   "Training: LoRA bf16, rank 32, 12 epochs, ~0.9% of params; ~60s (14B), ~55s (1.5B).\nTokens: 78/answer fine-tuned vs 302 base (B-204: 66 vs 320-cap).\nLatency: cache ~10ms · 1.5B ~1-2s · 14B ~4-13s.\nGPU: 192GB MI300X; full stack <35% of one card.",{bs:11});
 
 // ───────────────────────── SLIDE 6 — IMPACT & DEMO ───────────────────────────
-s=p.addSlide(); header(s,"IMPACT & DEMO SUMMARY","Why it matters, and what the jury will see");
+s=p.addSlide(); header(s,"IMPACT & DEMO SUMMARY","Trusted deflection that gets smarter every night");
 card(s,0.5,2.15,6.05,2.55,"EXPECTED IMPACT / VALUE",
-  "Trusted deflection: low-trust answers escalate to the right on-call expert via MCP (with an auto ITSM ticket) instead of reaching the customer.\n\n74% fewer tokens ≈ 4x throughput per GPU. Repeat questions become zero-GPU cache hits. The model improves nightly from human feedback in ~60s of GPU time — no ML team in the loop.",{bs:12});
+  "22% → 94% accuracy and 74% fewer tokens (~4x throughput per GPU).\n\nLow-trust answers escalate to the right on-call expert via MCP with an auto ITSM ticket — never reaching the customer. Repeat questions become zero-GPU cache hits, and the model improves nightly from human feedback in ~60s of GPU time, with no ML team in the loop.",{bs:12});
 card(s,6.75,2.15,6.05,2.55,"KEY DIFFERENTIATORS / INNOVATION",
   "1. Measurable fine-tuning — synthetic proprietary eval makes 22%→94% provable.\n2. Data flywheel — approvals become a zero-GPU cache AND the next training set (viable only because retraining costs ~60s on AMD).\n3. Right-sized compute — cache / 1.5B / 14B / human tiers on one card.\n4. Self-policing trust gate; fully local on AMD ROCm.",{bs:11.5});
-card(s,0.5,4.9,12.3,2.2,"DEMO FLOW  (what the jury should notice)",
+card(s,0.5,4.9,12.3,2.2,"DEMO FLOW — LIVE HIGHLIGHTS",
   "1. Base vs fine-tuned, live — base invents internal code B-204; TruthLine answers correctly from its weights.   2. Pipeline trace — PII masked, model-router decision, live MCP outage feed, trust score.   3. Right-sizing — FAQ → 1.5B fast lane, proprietary codes → 14B expert.   4. Flywheel — thumbs-up an answer, re-ask → instant zero-GPU cache hit.   5. Self-policing — an invented price trips the trust gate → escalation + MCP ITSM ticket.   6. Observability — live rocm-smi telemetry; a ~60-second retrain at 98% GPU.   Result: 22% → 94% accuracy, −74% tokens.",{bs:12.5});
 
 // ───────────────────────── SLIDE 7 — THANK YOU ───────────────────────────────
